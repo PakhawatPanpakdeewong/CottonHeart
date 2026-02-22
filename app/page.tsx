@@ -1,0 +1,370 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useCart } from '@/context/CartContext';
+import { useAuth } from '@/context/AuthContext';
+import { useFavorites } from '@/context/FavoritesContext';
+import Link from 'next/link';
+import Header from '@/components/Header';
+import { Heart, Baby, Package, UtensilsCrossed, LayoutGrid, Sparkles, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
+
+// Product Card Component
+interface ProductCardProps {
+  id: string;
+  name: string;
+  price: string;
+  originalPrice?: string;
+  image?: string | null;
+  category?: string | null;
+}
+
+const ProductCard = ({ id, name, price, originalPrice, image, category }: ProductCardProps) => (
+  <Link
+    href={`/products/${id}`}
+    className="block bg-white rounded-lg shadow-sm border border-gray-100 p-4 flex flex-col hover:border-pink-200 transition-colors"
+  >
+    <div className="w-full h-40 bg-gray-100 rounded-lg flex items-center justify-center mb-3 overflow-hidden">
+      {image ? (
+        <img
+          src={image}
+          alt={name}
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+            const parent = e.currentTarget.parentElement;
+            if (parent) {
+              parent.innerHTML = '<div class="text-gray-400 text-sm">ไม่มีรูปภาพ</div>';
+            }
+          }}
+        />
+      ) : (
+        <div className="text-gray-400 text-sm">ไม่มีรูปภาพ</div>
+      )}
+    </div>
+    {category && (
+      <p className="text-xs text-gray-500 mb-1">{category}</p>
+    )}
+    <h3 className="text-sm font-medium text-gray-900 mb-2 line-clamp-2">{name}</h3>
+    <div className="mt-auto">
+      {originalPrice && (
+        <p className="text-xs text-gray-500 line-through mb-1">จากราคา {originalPrice}</p>
+      )}
+      <p className="text-lg font-bold text-gray-900">{price} บาท</p>
+    </div>
+  </Link>
+);
+
+// Section Header Component
+interface SectionHeaderProps {
+  title: string;
+  linkText: string;
+  linkHref?: string;
+}
+
+const SectionHeader = ({ title, linkText, linkHref }: SectionHeaderProps) => (
+  <div className="flex justify-between items-center mb-4">
+    <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+    {linkHref ? (
+      <Link href={linkHref} className="text-sm text-pink-500 hover:text-pink-600">
+        {linkText}
+      </Link>
+    ) : (
+      <button className="text-sm text-pink-500 hover:text-pink-600">{linkText}</button>
+    )}
+  </div>
+);
+
+interface Product {
+  id: string;
+  name: string;
+  nameEN: string;
+  description: string | null;
+  price: string;
+  sku: string | null;
+  image: string | null;
+  brand: string | null;
+  category: string | null;
+  variantId: number | null;
+  isActive: boolean | null;
+  createdAt: string;
+}
+
+interface Category {
+  id: number;
+  nameTH: string;
+  nameEN: string;
+  subCategories: Array<{ id: number; nameTH: string; nameEN: string }>;
+}
+
+const CATEGORY_STYLES = [
+  { bg: 'bg-blue-50', hover: 'hover:bg-blue-100', icon: 'text-blue-600', Icon: Package },
+  { bg: 'bg-green-50', hover: 'hover:bg-green-100', icon: 'text-green-600', Icon: Baby },
+  { bg: 'bg-purple-50', hover: 'hover:bg-purple-100', icon: 'text-purple-600', Icon: Sparkles },
+  { bg: 'bg-amber-50', hover: 'hover:bg-amber-100', icon: 'text-amber-700', Icon: Heart },
+  { bg: 'bg-pink-50', hover: 'hover:bg-pink-100', icon: 'text-pink-600', Icon: UtensilsCrossed },
+  { bg: 'bg-slate-50', hover: 'hover:bg-slate-100', icon: 'text-slate-600', Icon: LayoutGrid },
+];
+
+export default function Home() {
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([]);
+  const [newProducts, setNewProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingRecommended, setLoadingRecommended] = useState(true);
+  const [loadingNew, setLoadingNew] = useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [errorRecommended, setErrorRecommended] = useState<string | null>(null);
+  const [errorNew, setErrorNew] = useState<string | null>(null);
+  const { getTotalItems } = useCart();
+  const { isAuthenticated } = useAuth();
+  const { favorites } = useFavorites();
+  const totalItems = getTotalItems();
+  const [favoritesPageIndex, setFavoritesPageIndex] = useState(0);
+
+  const CARDS_PER_PAGE = 2;
+  const maxFavoritesPage = Math.max(0, Math.ceil(favorites.length / CARDS_PER_PAGE) - 1);
+  const displayedFavorites = favorites.slice(
+    favoritesPageIndex * CARDS_PER_PAGE,
+    favoritesPageIndex * CARDS_PER_PAGE + CARDS_PER_PAGE
+  );
+
+  const goFavoritesPage = (direction: 'left' | 'right') => {
+    setFavoritesPageIndex((prev) => {
+      if (direction === 'left') return Math.max(0, prev - 1);
+      return Math.min(maxFavoritesPage, prev + 1);
+    });
+  };
+
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil(favorites.length / CARDS_PER_PAGE) - 1);
+    setFavoritesPageIndex((prev) => Math.min(prev, maxPage));
+  }, [favorites.length, maxFavoritesPage]);
+
+  // Fetch new products (added this month)
+  useEffect(() => {
+    const fetchNewProducts = async () => {
+      try {
+        setLoadingNew(true);
+        const response = await fetch('/api/products/new');
+        if (!response.ok) {
+          throw new Error('Failed to fetch new products');
+        }
+        const data = await response.json();
+        setNewProducts(data.products || []);
+      } catch (err) {
+        console.error('Error fetching new products:', err);
+        setErrorNew(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดสินค้าใหม่');
+      } finally {
+        setLoadingNew(false);
+      }
+    };
+
+    fetchNewProducts();
+  }, []);
+
+  // Fetch categories from database
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setLoadingCategories(true);
+        const response = await fetch('/api/categories');
+        if (!response.ok) {
+          throw new Error('Failed to fetch categories');
+        }
+        const data = await response.json();
+        setCategories(data.categories || []);
+      } catch (err) {
+        console.error('Error fetching categories:', err);
+      } finally {
+        setLoadingCategories(false);
+      }
+    };
+
+    fetchCategories();
+  }, []);
+
+  useEffect(() => {
+    const handleScroll = () => setShowScrollTop(window.scrollY > 300);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  return (
+    <div className="min-h-screen bg-[#fcfafc]">
+      <Header />
+
+      <main className="max-w-md mx-auto px-4 py-6 space-y-8 pb-8">
+        {/* Favorite Products - โชว์ทีละ 2 การ์ด */}
+        {favorites.length > 0 && (
+          <section className="relative">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">สินค้าที่ชอบ</h2>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => goFavoritesPage('left')}
+                  disabled={favoritesPageIndex === 0}
+                  aria-label="เลื่อนซ้าย"
+                  className={`w-9 h-9 rounded-full border shadow-sm flex items-center justify-center transition-colors ${
+                    favoritesPageIndex === 0
+                      ? 'bg-gray-100 text-gray-300 border-gray-100 cursor-not-allowed'
+                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'
+                  }`}
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => goFavoritesPage('right')}
+                  disabled={favoritesPageIndex >= maxFavoritesPage}
+                  aria-label="เลื่อนขวา"
+                  className={`w-9 h-9 rounded-full border shadow-sm flex items-center justify-center transition-colors ${
+                    favoritesPageIndex >= maxFavoritesPage
+                      ? 'bg-gray-100 text-gray-300 border-gray-100 cursor-not-allowed'
+                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'
+                  }`}
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {displayedFavorites.map((product) => (
+                <Link
+                  key={product.id}
+                  href={`/products/${product.id}`}
+                  className="block bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex flex-col hover:border-pink-200 transition-colors"
+                >
+                  <div className="w-full h-32 bg-white rounded-lg flex items-center justify-center mb-2 overflow-hidden">
+                    {product.image ? (
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          const parent = e.currentTarget.parentElement;
+                          if (parent) {
+                            parent.innerHTML = '<div class="text-gray-400 text-xs">ไม่มีรูปภาพ</div>';
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="text-gray-400 text-xs">ไม่มีรูปภาพ</div>
+                    )}
+                  </div>
+                  <h3 className="text-sm font-medium text-gray-900 line-clamp-2 mb-1">{product.name}</h3>
+                  <p className="text-base font-bold text-gray-900 mt-auto">{product.price.toFixed(2)} บาท</p>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Previously Ordered Products - Only show if authenticated */}
+        {isAuthenticated && (
+          <section>
+            <SectionHeader title="สินค้าที่เคยสั่งซื้อ" linkText="ดูเพิ่มเติม" />
+            <div className="grid grid-cols-2 gap-4">
+              <ProductCard
+                id="product-1"
+                name="Natur SMART biomimic Anti-colic bottle"
+                price="199.00"
+              />
+              <ProductCard
+                id="product-2"
+                name="Watsons Moisturising Baby Milk Bath"
+                price="95.00"
+              />
+            </div>
+          </section>
+        )}
+
+        {/* Product Categories - Shop By Category style */}
+        <section className="bg-white rounded-2xl border border-gray-100 p-5">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-bold text-gray-900">ประเภทสินค้า</h2>
+            <Link href="/categories" className="text-sm font-medium text-orange-500 hover:text-orange-600">
+              หมวดอื่นๆ
+            </Link>
+          </div>
+          {loadingCategories ? (
+            <div className="grid grid-cols-2 gap-3">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="bg-gray-100 rounded-xl p-4 h-14 animate-pulse" />
+              ))}
+            </div>
+          ) : categories.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3">
+              {categories.slice(0, 6).map((category, index) => {
+                const style = CATEGORY_STYLES[index % CATEGORY_STYLES.length];
+                const IconComponent = style.Icon;
+                return (
+                  <Link
+                    key={category.id}
+                    href={`/search?category=${category.id}`}
+                    className={`${style.bg} ${style.hover} rounded-xl p-4 flex items-center gap-3 transition-colors`}
+                  >
+                    <div className={`flex-shrink-0 ${style.icon}`}>
+                      <IconComponent className="w-6 h-6" strokeWidth={1.5} />
+                    </div>
+                    <span className="text-sm font-medium text-gray-900 line-clamp-2">
+                      {category.nameTH}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-6 text-gray-500 text-sm">
+              ไม่มีประเภทสินค้าในระบบ
+            </div>
+          )}
+        </section>
+
+        {/* New Products */}
+        <section>
+          <SectionHeader title="สินค้าใหม่" linkText="ดูเพิ่มเติม" linkHref="/search?sort=new" />
+          {loadingNew ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-100 rounded-lg h-64 animate-pulse"></div>
+              <div className="bg-gray-100 rounded-lg h-64 animate-pulse"></div>
+            </div>
+          ) : errorNew ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>{errorNew}</p>
+            </div>
+          ) : newProducts.length > 0 ? (
+            <div className="grid grid-cols-2 gap-4">
+              {newProducts.slice(0, 6).map((product) => (
+                <ProductCard
+                  key={product.id}
+                  id={product.id}
+                  name={product.name}
+                  price={product.price}
+                  image={product.image}
+                  category={product.category}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <p>ไม่มีสินค้าใหม่ในเดือนนี้</p>
+            </div>
+          )}
+        </section>
+      </main>
+
+      {/* Scroll to Top Button */}
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-4 z-10 w-11 h-11 bg-white border-2 border-pink-500 text-pink-500 rounded-full shadow-lg flex items-center justify-center hover:bg-pink-50 transition-colors"
+          aria-label="เลื่อนกลับขึ้นด้านบน"
+        >
+          <ChevronUp className="w-6 h-6" />
+        </button>
+      )}
+    </div>
+  );
+}

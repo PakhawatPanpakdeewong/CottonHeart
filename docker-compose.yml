@@ -1,0 +1,66 @@
+
+services:
+  # Next.js Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: deps
+    container_name: cottonheart-app
+    command: npm run dev
+    ports:
+      - "3000:3000"
+    env_file:
+      - .docker.env
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - WATCHPACK_POLLING=true
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    networks:
+      - cottonheart-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: cottonheart-db
+    environment:
+      - POSTGRES_DB=cottonheart_dev
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - cottonheart-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: cottonheart-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - cottonheart-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  cottonheart-network:
+    driver: bridge
+
