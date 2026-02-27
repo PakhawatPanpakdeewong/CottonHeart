@@ -110,13 +110,17 @@ export default function Home() {
   const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([]);
   const [newProducts, setNewProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [previouslyOrderedProducts, setPreviouslyOrderedProducts] = useState<
+    { id: string; name: string; price: number; image: string | null; category: string }[]
+  >([]);
   const [loadingRecommended, setLoadingRecommended] = useState(true);
   const [loadingNew, setLoadingNew] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  const [loadingOrdered, setLoadingOrdered] = useState(false);
   const [errorRecommended, setErrorRecommended] = useState<string | null>(null);
   const [errorNew, setErrorNew] = useState<string | null>(null);
   const { getTotalItems } = useCart();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { favorites } = useFavorites();
   const totalItems = getTotalItems();
   const [favoritesPageIndex, setFavoritesPageIndex] = useState(0);
@@ -182,6 +186,47 @@ export default function Home() {
 
     fetchCategories();
   }, []);
+
+  // Fetch previously ordered products (สินค้าที่เคยสั่งซื้อ) when authenticated
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      setPreviouslyOrderedProducts([]);
+      return;
+    }
+    const email = user.username?.includes('@') ? user.username : user.email || user.username;
+    if (!email) return;
+
+    const fetchOrderedProducts = async () => {
+      try {
+        setLoadingOrdered(true);
+        const res = await fetch(`/api/users/orders?email=${encodeURIComponent(email)}`);
+        const data = await res.json();
+        const orders = data.orders || [];
+        // Deduplicate by productId (keep most recent order)
+        const seen = new Set<string>();
+        const unique = orders
+          .filter((o: { productId: string }) => {
+            if (seen.has(o.productId)) return false;
+            seen.add(o.productId);
+            return true;
+          })
+          .map((o: { productId: string; productName: string; price: number; image: string | null; category: string }) => ({
+            id: o.productId,
+            name: o.productName,
+            price: o.price,
+            image: o.image,
+            category: o.category || '',
+          }));
+        setPreviouslyOrderedProducts(unique);
+      } catch {
+        setPreviouslyOrderedProducts([]);
+      } finally {
+        setLoadingOrdered(false);
+      }
+    };
+
+    fetchOrderedProducts();
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
     const handleScroll = () => setShowScrollTop(window.scrollY > 300);
@@ -261,22 +306,37 @@ export default function Home() {
           </section>
         )}
 
-        {/* Previously Ordered Products - Only show if authenticated */}
+        {/* Previously Ordered Products - Only show if authenticated, data from DB */}
         {isAuthenticated && (
           <section>
-            <SectionHeader title="สินค้าที่เคยสั่งซื้อ" linkText="ดูเพิ่มเติม" />
-            <div className="grid grid-cols-2 gap-4">
-              <ProductCard
-                id="product-1"
-                name="Natur SMART biomimic Anti-colic bottle"
-                price="199.00"
-              />
-              <ProductCard
-                id="product-2"
-                name="Watsons Moisturising Baby Milk Bath"
-                price="95.00"
-              />
-            </div>
+            <SectionHeader
+              title="สินค้าที่เคยสั่งซื้อ"
+              linkText="ดูเพิ่มเติม"
+              linkHref="/profile"
+            />
+            {loadingOrdered ? (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-100 rounded-lg h-64 animate-pulse" />
+                <div className="bg-gray-100 rounded-lg h-64 animate-pulse" />
+              </div>
+            ) : previouslyOrderedProducts.length > 0 ? (
+              <div className="grid grid-cols-2 gap-4">
+                {previouslyOrderedProducts.slice(0, 4).map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    id={product.id}
+                    name={product.name}
+                    price={product.price.toFixed(2)}
+                    image={product.image}
+                    category={product.category}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500 text-sm bg-white rounded-xl border border-gray-100">
+                คุณยังไม่มีประวัติการสั่งซื้อ
+              </div>
+            )}
           </section>
         )}
 

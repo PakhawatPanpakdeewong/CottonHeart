@@ -34,7 +34,7 @@ function LoginForm() {
 
     // Basic validation
     if (!usernameOrEmail.trim() || !password.trim()) {
-      setError('กรุณากรอกชื่อหรืออีเมลล์และรหัสผ่าน');
+      setError('กรุณากรอกอีเมลล์และรหัสผ่าน');
       setIsLoading(false);
       return;
     }
@@ -47,7 +47,7 @@ function LoginForm() {
       const returnUrl = searchParams.get('returnUrl') || '/';
       router.push(returnUrl);
     } else {
-      setError('ชื่อหรือรหัสผ่านของท่านไม่ถูกต้อง กรุณากรอกใหม่อีกครั้ง');
+      setError('อีเมลล์หรือรหัสผ่านไม่ถูกต้อง กรุณากรอกใหม่อีกครั้ง');
       setIsLoading(false);
     }
   };
@@ -68,14 +68,14 @@ function LoginForm() {
           {/* Username/Email Field */}
           <div className="space-y-2">
             <label htmlFor="usernameOrEmail" className="text-sm font-medium text-gray-700">
-              ชื่อหรืออีเมลล์
+              อีเมลล์
             </label>
             <Input
               id="usernameOrEmail"
-              type="text"
+              type="email"
               value={usernameOrEmail}
               onChange={(e) => setUsernameOrEmail(e.target.value)}
-              placeholder="กรุณาใส่ชื่อหรืออีเมลล์ของคุณ"
+              placeholder="กรุณาใส่อีเมลล์ที่ใช้ลงทะเบียน"
               disabled={isLoading}
               className="h-12"
             />

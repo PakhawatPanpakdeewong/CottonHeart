@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
@@ -42,10 +42,17 @@ export default function CategoriesPage() {
           throw new Error('Failed to fetch categories');
         }
         const data = await response.json();
-        setCategories(data.categories || []);
-        // Expand first category by default if available
-        if (data.categories && data.categories.length > 0) {
-          setExpandedCategories(new Set([data.categories[0].id]));
+        const rawCategories = data.categories || [];
+        setCategories(rawCategories);
+        // Expand first category that has products
+        const withProducts = rawCategories
+          .map((cat: Category) => ({
+            ...cat,
+            subCategories: (cat.subCategories || []).filter((sc: SubCategory) => sc.productCount > 0),
+          }))
+          .filter((cat: { subCategories: SubCategory[] }) => cat.subCategories.length > 0);
+        if (withProducts.length > 0) {
+          setExpandedCategories(new Set([withProducts[0].id]));
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
@@ -73,6 +80,16 @@ export default function CategoriesPage() {
   const handleSubCategoryClick = (categoryId: number, subCategoryId: number) => {
     router.push(`/search?category=${categoryId}&subcategory=${subCategoryId}`);
   };
+
+  // กรองเฉพาะหมวดที่มีสินค้า
+  const filteredCategories = useMemo(() => {
+    return categories
+      .map((category) => ({
+        ...category,
+        subCategories: category.subCategories.filter((sc) => sc.productCount > 0),
+      }))
+      .filter((category) => category.subCategories.length > 0);
+  }, [categories]);
 
   if (loading) {
     return (
@@ -147,7 +164,12 @@ export default function CategoriesPage() {
 
         {/* Categories List */}
         <div className="space-y-2">
-          {categories.map((category) => {
+          {filteredCategories.length === 0 ? (
+            <div className="text-center py-12 text-gray-500 text-sm">
+              ยังไม่มีประเภทสินค้าในขณะนี้
+            </div>
+          ) : (
+          filteredCategories.map((category) => {
             const isExpanded = expandedCategories.has(category.id);
 
             return (
@@ -204,7 +226,8 @@ export default function CategoriesPage() {
                 </CollapsibleContent>
               </Collapsible>
             );
-          })}
+          })
+          )}
         </div>
       </main>
     </div>

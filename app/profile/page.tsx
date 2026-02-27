@@ -132,6 +132,15 @@ export default function ProfilePage() {
       ? orders
       : orders.filter((o) => o.status === orderFilter);
 
+  // Group by orderId (หมายเลขออเดอร์) - one card per order
+  const ordersByOrderId = filteredOrders.reduce<Record<string, OrderItem[]>>((acc, item) => {
+    const oid = item.orderId ?? item.id;
+    if (!acc[oid]) acc[oid] = [];
+    acc[oid].push(item);
+    return acc;
+  }, {});
+  const orderGroups = Object.entries(ordersByOrderId);
+
   const orderTabs = [
     { key: 'all' as const, label: 'รายการทั้งหมด' },
     { key: 'ordered' as const, label: 'ที่สั่งซื้อ' },
@@ -158,51 +167,49 @@ export default function ProfilePage() {
           <h1 className="text-xl font-bold text-gray-900">โปรไฟล์ผู้ใช้งาน</h1>
         </div>
 
-        {/* User Info Card */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden flex-shrink-0">
-              {profileData?.profileImage ? (
-                <img
-                  src={profileData.profileImage}
-                  alt="Profile"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <User className="w-8 h-8 text-gray-400" />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <h2 className="font-bold text-gray-900 truncate">
+        {/* Profile Info Card - Combined */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
+          <div className="p-5 space-y-4">
+            {/* Name & Email */}
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
                 {profileData?.fullName || user?.username || 'ผู้ใช้งาน'}
               </h2>
-              <p className="text-sm text-gray-500 truncate">
+              <p className="text-sm text-gray-500 mt-0.5">
                 {profileData?.email || '—'}
               </p>
             </div>
+
+            <div className="border-t border-gray-100" />
+
+            {/* Address */}
+            <div className="flex gap-3">
+              <MapPin className="w-5 h-5 text-pink-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">
+                  ที่อยู่การจัดส่งหลัก
+                </p>
+                <p className="text-sm text-gray-700">
+                  {profileData?.address || 'ยังไม่ได้ระบุที่อยู่'}
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100" />
+
+            {/* Phone */}
+            <div className="flex gap-3">
+              <Phone className="w-5 h-5 text-pink-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">
+                  เบอร์โทรศัพท์
+                </p>
+                <p className="text-sm text-gray-700">
+                  {profileData?.phone ? maskPhone(profileData.phone) : 'XXX-XXX-XXXX'}
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
-
-        {/* Main Delivery Address */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4">
-          <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-gray-500" />
-            ที่อยู่การจัดส่งหลัก
-          </h3>
-          <p className="text-sm text-gray-600">
-            {profileData?.address || 'ยังไม่ได้ระบุที่อยู่'}
-          </p>
-        </div>
-
-        {/* Phone Number */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4">
-          <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
-            <Phone className="w-4 h-4 text-gray-500" />
-            เบอร์โทรศัพท์
-          </h3>
-          <p className="text-sm text-gray-600">
-            {profileData?.phone ? maskPhone(profileData.phone) : 'XXX-XXX-XXXX'}
-          </p>
         </div>
 
         {/* Action Buttons */}
@@ -281,62 +288,76 @@ export default function ProfilePage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="bg-white rounded-xl border border-gray-100 shadow-sm p-4"
-                >
-                  <div className="flex gap-4">
-                    <div className="w-20 h-20 rounded-lg bg-gray-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
-                      {order.image ? (
-                        <img
-                          src={order.image}
-                          alt={order.productName}
-                          className="w-full h-full object-contain"
-                        />
-                      ) : (
-                        <span className="text-xs text-gray-400">ไม่มีรูป</span>
-                      )}
+              {orderGroups.map(([orderId, items]) => {
+                const firstItem = items[0];
+                return (
+                  <div
+                    key={orderId}
+                    className="bg-white rounded-xl border border-gray-100 shadow-sm p-4"
+                  >
+                    {/* หมายเลขออเดอร์ */}
+                    <p className="text-xs font-medium text-gray-500 mb-3">
+                      หมายเลขออเดอร์: <span className="text-gray-900">{orderId}</span>
+                    </p>
+                    {/* รายการสินค้าในออเดอร์ */}
+                    <div className="space-y-3">
+                      {items.map((item) => (
+                        <div key={item.id} className="flex gap-4">
+                          <div className="w-20 h-20 rounded-lg bg-gray-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                            {item.image ? (
+                              <img
+                                src={item.image}
+                                alt={item.productName}
+                                className="w-full h-full object-contain"
+                              />
+                            ) : (
+                              <span className="text-xs text-gray-400">ไม่มีรูป</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-gray-500 mb-1">{item.category}</p>
+                            <h3 className="font-medium text-gray-900 text-sm line-clamp-2 mb-1">
+                              {item.productName}
+                            </h3>
+                            {item.variant && (
+                              <p className="text-xs text-gray-600 mb-1">
+                                ประเภท: {item.variant}
+                              </p>
+                            )}
+                            <p className="text-xs text-gray-600 mb-1">
+                              จำนวน: {item.quantity} หน่วย
+                            </p>
+                            <p className="font-bold text-gray-900">฿ {item.price.toFixed(2)}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-500 mb-1">{order.category}</p>
-                      <h3 className="font-medium text-gray-900 text-sm line-clamp-2 mb-1">
-                        {order.productName}
-                      </h3>
-                      {order.variant && (
-                        <p className="text-xs text-gray-600 mb-1">
-                          ประเภท: {order.variant}
-                        </p>
-                      )}
-                      <p className="text-xs text-gray-600 mb-2">
-                        จำนวน: {order.quantity} หน่วย
-                      </p>
-                      <p className="font-bold text-gray-900">฿ {order.price.toFixed(2)}</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    <span
-                      className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${STATUS_STYLES[order.status]}`}
-                    >
-                      {STATUS_LABELS[order.status]}
-                    </span>
-                    <Link
-                      href={`/orders/${order.orderId || order.id}`}
-                      className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
-                    >
-                      ดูรายละเอียดออเดอร์
-                    </Link>
-                    {order.status === 'delivered' && (
-                      <Link
-                        href={`/products/${order.productId}/review`}
-                        className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
+                      <span
+                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${STATUS_STYLES[firstItem.status]}`}
                       >
-                        รีวิว
+                        {STATUS_LABELS[firstItem.status]}
+                      </span>
+                      <Link
+                        href={`/orders/${orderId}`}
+                        className="inline-flex items-center px-3 py-1.5 border border-pink-500 rounded-lg text-xs font-medium text-pink-500 bg-white hover:bg-pink-50"
+                      >
+                        ดูรายละเอียดออเดอร์
                       </Link>
-                    )}
+                      {firstItem.status === 'delivered' &&
+                        items.map((item) => (
+                          <Link
+                            key={item.id}
+                            href={`/products/${item.productId}/review`}
+                            className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
+                          >
+                            รีวิว
+                          </Link>
+                        ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>

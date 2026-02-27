@@ -55,9 +55,10 @@ interface FormErrors {
 
 export default function DeliveryPage() {
   const { cartItems, getSelectedItems, getSelectedTotalPrice, removeFromCart } = useCart();
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
   const router = useRouter();
   const firstErrorRef = useRef<HTMLDivElement | null>(null);
+  const checkoutSuccessRef = useRef(false);
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -117,7 +118,7 @@ export default function DeliveryPage() {
   }, [isAuthenticated, isLoading, router]);
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
+    if (!isLoading && isAuthenticated && !checkoutSuccessRef.current) {
       if (cartItems.length === 0 || selectedItems.length === 0) {
         router.push('/cart');
       }
@@ -202,12 +203,17 @@ export default function DeliveryPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        setErrors({ confirmed: data.error || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง' });
+        const errorMsg = data.error || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง';
+        setErrors({ confirmed: errorMsg });
+        if (errorMsg.includes('ไม่พบข้อมูลลูกค้า')) {
+          logout();
+          router.push(`/login?returnUrl=${encodeURIComponent('/checkout/delivery')}`);
+        }
         return;
       }
-      // ลบสินค้าที่สั่งซื้อออกจากตะกร้า
-      selectedItems.forEach((item) => removeFromCart(item.id));
+      checkoutSuccessRef.current = true;
       router.push(data.orderId ? `/checkout/payment?orderId=${data.orderId}` : '/checkout/payment');
+      selectedItems.forEach((item) => removeFromCart(item.id));
     } catch {
       setErrors({ confirmed: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง' });
     } finally {

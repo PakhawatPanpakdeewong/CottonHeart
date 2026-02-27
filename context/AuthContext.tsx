@@ -41,23 +41,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (username: string, password: string): Promise<boolean> => {
-    // Simulate API call (will be replaced with actual backend call)
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        // Mock validation - in real app, this will check against database
-        if (username.trim() && password.trim()) {
-          const userData: User = {
-            username: username,
-            loggedIn: true,
-          };
-          setUser(userData);
-          localStorage.setItem('cottonheart_user', JSON.stringify(userData));
-          resolve(true);
-        } else {
-          resolve(false);
-        }
-      }, 500);
-    });
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usernameOrEmail: username, password }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.user) return false;
+      const userData: User = {
+        username: data.user.email,
+        email: data.user.email,
+        loggedIn: true,
+      };
+      setUser(userData);
+      localStorage.setItem('cottonheart_user', JSON.stringify(userData));
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const logout = () => {
