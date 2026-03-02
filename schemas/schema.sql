@@ -234,6 +234,7 @@ CREATE TABLE IF NOT EXISTS Payments (
     PaymentMethod VARCHAR(50) NOT NULL CHECK (PaymentMethod IN ('credit_card', 'debit_card', 'bank_transfer', 'cash_on_delivery', 'digital_wallet')),
     TransactionID VARCHAR(255) UNIQUE,
     PaymentStatus VARCHAR(50) DEFAULT 'pending' CHECK (PaymentStatus IN ('pending', 'completed', 'failed', 'refunded')),
+    PaymentDeadlineAt TIMESTAMP WITH TIME ZONE,
     TrackingNumber VARCHAR(255) UNIQUE,
     CreatedDate TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UpdatedDate TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

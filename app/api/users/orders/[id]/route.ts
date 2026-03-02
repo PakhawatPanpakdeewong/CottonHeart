@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getProductImageUrl } from '@/lib/image-utils';
 
-function mapOrderStatus(dbStatus: string): 'ordered' | 'shipping' | 'delivered' | 'cancelled' {
+function mapOrderStatus(dbStatus: string): 'ordered' | 'confirmed' | 'shipping' | 'delivered' | 'cancelled' {
   switch (dbStatus?.toLowerCase()) {
+    case 'confirmed':
+      return 'confirmed';
     case 'shipped':
     case 'in_transit':
       return 'shipping';
@@ -61,6 +63,14 @@ export async function GET(
       return NextResponse.json({ error: 'ไม่พบคำสั่งซื้อหรือไม่มีสิทธิ์เข้าถึง' }, { status: 404 });
     }
 
+    // Lazy expire: ตรวจสอบและยกเลิกออเดอร์ที่เกิน 30 นาที
+    const { expireOverduePayments } = await import('@/lib/expire-payments');
+    try {
+      await expireOverduePayments();
+    } catch {
+      // ignore
+    }
+
     const orderRow = orderRes.rows[0];
     const fullName = [orderRow.firstname, orderRow.lastname].filter(Boolean).join(' ').trim() || '—';
 
@@ -116,9 +126,9 @@ export async function GET(
     const ship = shipRes.rows[0] || {};
     const shippingCost = parseFloat(ship.shippingcost) || 50;
 
-    // 4. Payment (payments table: paymentid, orderid, paymentdate, paymentamount, paymentmethod, paymentstatus, trackingnumber, createddate, updateddate, paidamount)
+    // 4. Payment (รวม payment_deadline_at สำหรับ countdown)
     const payRes = await pool.query(
-      `SELECT paymentamount, paymentmethod, paymentdate, trackingnumber, paymentstatus
+      `SELECT paymentamount, paymentmethod, paymentdate, trackingnumber, paymentstatus, payment_deadline_at
        FROM payments
        WHERE orderid = $1
        ORDER BY paymentid DESC
@@ -127,10 +137,16 @@ export async function GET(
     );
     const pay = payRes.rows[0] || {};
 
+    // ถ้า deliverystatus ใน shipments เป็น 'delivered' ให้แสดงเป็นจัดส่งสำเร็จ
+    const effectiveOrderStatus =
+      ship.deliverystatus?.toLowerCase() === 'delivered'
+        ? 'delivered'
+        : mapOrderStatus(orderRow.orderstatus);
+
     const order = {
       orderId: orderRow.orderid.toString(),
       orderDate: orderRow.orderdate,
-      orderStatus: mapOrderStatus(orderRow.orderstatus),
+      orderStatus: effectiveOrderStatus,
       totalAmount: parseFloat(orderRow.totalamount),
       shippingAddress: orderRow.shippingaddress || '—',
       referenceCode: orderRow.notes || null,
@@ -146,6 +162,7 @@ export async function GET(
       paymentDate: pay.paymentdate || null,
       paymentTransactionId: pay.trackingnumber || null,
       paymentStatus: pay.paymentstatus || null,
+      paymentDeadlineAt: pay.payment_deadline_at || null,
     };
 
     return NextResponse.json({ order });

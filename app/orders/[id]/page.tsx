@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { useCart } from '@/context/CartContext';
 import Header from '@/components/Header';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ShoppingCart } from 'lucide-react';
 
-type OrderStatus = 'ordered' | 'shipping' | 'delivered' | 'cancelled';
+type OrderStatus = 'ordered' | 'confirmed' | 'shipping' | 'delivered' | 'cancelled';
 
 interface OrderItem {
   id: string;
@@ -39,10 +40,12 @@ interface OrderDetail {
   paymentDate: string | null;
   paymentTransactionId: string | null;
   paymentStatus: string | null;
+  referenceCode: string | null;
 }
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   ordered: 'คำสั่งซื้อของคุณกำลังจัดเตรียม',
+  confirmed: 'คำสั่งซื้อได้รับการยืนยันแล้ว',
   shipping: 'คำสั่งซื้อของคุณกำลังจัดส่ง',
   delivered: 'จัดส่งสำเร็จแล้ว',
   cancelled: 'คำสั่งซื้อถูกยกเลิก',
@@ -50,6 +53,7 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
 
 const STATUS_BANNER_COLOR: Record<OrderStatus, string> = {
   ordered: 'bg-blue-500',
+  confirmed: 'bg-green-500',
   shipping: 'bg-blue-600',
   delivered: 'bg-green-600',
   cancelled: 'bg-gray-500',
@@ -86,6 +90,7 @@ export default function OrderDetailPage() {
   const params = useParams();
   const orderId = params?.id as string;
   const { user, isAuthenticated, isLoading } = useAuth();
+  const { addToCartWithQuantity } = useCart();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -157,7 +162,27 @@ export default function OrderDetailPage() {
 
   const statusLabel = STATUS_LABELS[order.orderStatus];
   const bannerColor = STATUS_BANNER_COLOR[order.orderStatus];
+  // อนุญาตยกเลิกได้เฉพาะสถานะ ordered (pending) เท่านั้น - ถ้า confirmed แล้วไม่อนุญาต
   const canCancel = order.orderStatus === 'ordered';
+  // แสดงปุ่มซื้ออีกครั้ง เมื่อออเดอร์ถูกยกเลิก หรือจัดส่งสำเร็จแล้ว
+  const canBuyAgain = order.orderStatus === 'cancelled' || order.orderStatus === 'delivered';
+
+  const handleBuyAgain = () => {
+    if (!order) return;
+    order.items.forEach((item) => {
+      addToCartWithQuantity(
+        {
+          id: item.productId,
+          name: item.productName,
+          price: item.unitPrice,
+          image: item.image,
+          category: item.category || null,
+          sku: item.variant || null,
+        },
+        item.quantity
+      );
+    });
+  };
 
   return (
     <div className="min-h-screen bg-[#fcfafc]">
@@ -207,6 +232,14 @@ export default function OrderDetailPage() {
             <p className="text-gray-700 font-medium">
               <span className="text-gray-500">ยอดการสั่งซื้อ:</span> ฿ {order.subtotal.toFixed(2)}
             </p>
+            {order.referenceCode && (
+              <div className="mt-3 p-3 rounded-lg bg-green-50 border-2 border-green-200">
+                <p className="text-xs text-gray-600 mb-1">เลขยืนยันการโอน</p>
+                <p className="font-mono text-lg font-bold text-green-700 tracking-wider">
+                  {order.referenceCode}
+                </p>
+              </div>
+            )}
           </div>
         </section>
 
@@ -286,6 +319,21 @@ export default function OrderDetailPage() {
             }}
           >
             ยกเลิกการสั่งซื้อ
+          </button>
+        )}
+
+        {/* Buy Again Button - แสดงเมื่อออเดอร์ถูกยกเลิกหรือจัดส่งสำเร็จ */}
+        {canBuyAgain && (
+          <button
+            type="button"
+            onClick={() => {
+              handleBuyAgain();
+              router.push('/cart');
+            }}
+            className="w-full py-3 px-4 bg-pink-500 text-white rounded-lg font-medium hover:bg-pink-600 transition-colors mb-4 flex items-center justify-center gap-2"
+          >
+            <ShoppingCart className="w-5 h-5" />
+            ซื้ออีกครั้ง
           </button>
         )}
 

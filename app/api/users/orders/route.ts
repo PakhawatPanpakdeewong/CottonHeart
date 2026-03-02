@@ -3,8 +3,10 @@ import pool from '@/lib/db';
 import { getProductImageUrl } from '@/lib/image-utils';
 
 // Map DB orderstatus to frontend status
-function mapOrderStatus(dbStatus: string): 'ordered' | 'shipping' | 'delivered' | 'cancelled' {
+function mapOrderStatus(dbStatus: string): 'ordered' | 'confirmed' | 'shipping' | 'delivered' | 'cancelled' {
   switch (dbStatus?.toLowerCase()) {
+    case 'confirmed':
+      return 'confirmed';
     case 'shipped':
     case 'in_transit':
       return 'shipping';
@@ -13,7 +15,7 @@ function mapOrderStatus(dbStatus: string): 'ordered' | 'shipping' | 'delivered' 
     case 'cancelled':
       return 'cancelled';
     default:
-      return 'ordered'; // pending, confirmed
+      return 'ordered'; // pending
   }
 }
 
@@ -30,6 +32,7 @@ export async function GET(request: NextRequest) {
         o.orderid,
         o.orderdate,
         o.orderstatus,
+        o.totalamount,
         oi.quantityordered,
         oi.unitprice,
         oi.totalprice,
@@ -37,7 +40,12 @@ export async function GET(request: NextRequest) {
         p.productnameth,
         p.productnameen,
         c.categorynameth,
-        pv.sku
+        pv.sku,
+        pv.variantid,
+        pay.paymentamount,
+        pay.paymentstatus,
+        pay.payment_deadline_at,
+        ship.deliverystatus AS shipment_deliverystatus
        FROM orders o
        JOIN order_items oi ON o.orderid = oi.orderid
        JOIN inventories i ON oi.inventoryid = i.inventoryid
@@ -45,6 +53,20 @@ export async function GET(request: NextRequest) {
        JOIN products p ON pv.productid = p.productid
        LEFT JOIN subcategories sc ON p.subcategoryid = sc.subcategoryid
        LEFT JOIN categories c ON sc.categoryid = c.categoryid
+       LEFT JOIN LATERAL (
+         SELECT paymentamount, paymentstatus, payment_deadline_at
+         FROM payments
+         WHERE orderid = o.orderid
+         ORDER BY paymentid DESC
+         LIMIT 1
+       ) pay ON true
+       LEFT JOIN LATERAL (
+         SELECT deliverystatus
+         FROM shipments
+         WHERE orderid = o.orderid
+         ORDER BY shipmentid DESC
+         LIMIT 1
+       ) ship ON true
        JOIN customers cust ON o.customerid = cust.customerid
        WHERE cust.email = $1
        ORDER BY o.orderdate DESC, oi.orderitemid ASC`,
@@ -56,6 +78,7 @@ export async function GET(request: NextRequest) {
       orderid: number;
       orderdate: string;
       orderstatus: string;
+      totalamount: string;
       quantityordered: number;
       unitprice: string;
       totalprice: string;
@@ -64,7 +87,18 @@ export async function GET(request: NextRequest) {
       productnameen: string;
       categorynameth: string | null;
       sku: string;
-    }) => ({
+      variantid: number;
+      paymentamount: string | null;
+      paymentstatus: string | null;
+      payment_deadline_at: string | null;
+      shipment_deliverystatus: string | null;
+    }) => {
+      // ถ้า deliverystatus ใน shipments เป็น 'delivered' ให้แสดงเป็นจัดส่งสำเร็จ
+      const effectiveStatus =
+        row.shipment_deliverystatus?.toLowerCase() === 'delivered'
+          ? 'delivered'
+          : mapOrderStatus(row.orderstatus);
+      return {
       id: row.orderitemid.toString(),
       orderId: row.orderid.toString(),
       productId: row.productid.toString(),
@@ -72,10 +106,16 @@ export async function GET(request: NextRequest) {
       category: row.categorynameth || '',
       image: getProductImageUrl(row.sku),
       variant: row.sku,
+      variantId: row.variantid?.toString(),
       quantity: row.quantityordered,
       price: parseFloat(row.totalprice) || parseFloat(row.unitprice) * row.quantityordered,
-      status: mapOrderStatus(row.orderstatus),
-    }));
+      status: effectiveStatus,
+      totalAmount: parseFloat(row.totalamount) || 0,
+      paymentAmount: row.paymentamount ? parseFloat(row.paymentamount) : null,
+      paymentStatus: row.paymentstatus || null,
+      paymentDeadlineAt: row.payment_deadline_at || null,
+    };
+    });
 
     return NextResponse.json({ orders });
   } catch (error) {

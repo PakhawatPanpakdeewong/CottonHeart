@@ -14,10 +14,11 @@ interface CheckoutBody {
   email: string;
   fullName: string;
   phone: string;
-  addressLine1: string;
-  subDistrict: string;
-  postalCode: string;
-  province: string;
+  addressId?: number;
+  addressLine1?: string;
+  subDistrict?: string;
+  postalCode?: string;
+  province?: string;
   items: CartItemInput[];
 }
 
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
       email,
       fullName,
       phone,
+      addressId,
       addressLine1,
       subDistrict,
       postalCode,
@@ -35,10 +37,30 @@ export async function POST(request: NextRequest) {
       items,
     } = body;
 
-    if (!email?.trim() || !fullName?.trim() || !phone?.trim() || !addressLine1?.trim() ||
-        !subDistrict?.trim() || !postalCode?.trim() || !province?.trim()) {
+    if (!email?.trim() || !fullName?.trim() || !phone?.trim()) {
       return NextResponse.json(
         { error: 'กรุณากรอกข้อมูลการจัดส่งให้ครบถ้วน' },
+        { status: 400 }
+      );
+    }
+
+    let shippingAddressText: string;
+    if (addressId) {
+      const addrRes = await pool.query(
+        `SELECT addressline1, city, state, zipcode FROM addresses 
+         WHERE addressid = $1 AND customerid = (SELECT customerid FROM customers WHERE email = $2 AND isactive = true)`,
+        [addressId, email.trim().toLowerCase()]
+      );
+      if (addrRes.rows.length === 0) {
+        return NextResponse.json({ error: 'ไม่พบที่อยู่ที่เลือก กรุณาเลือกที่อยู่ใหม่' }, { status: 400 });
+      }
+      const a = addrRes.rows[0];
+      shippingAddressText = `${a.addressline1 || ''}, ${a.city || ''}, ${a.zipcode || ''}, ${a.state || ''}`;
+    } else if (addressLine1?.trim() && subDistrict?.trim() && postalCode?.trim() && province?.trim()) {
+      shippingAddressText = `${addressLine1.trim()}, ${subDistrict.trim()}, ${postalCode.trim()}, ${province.trim()}`;
+    } else {
+      return NextResponse.json(
+        { error: 'กรุณากรอกที่อยู่การจัดส่งให้ครบถ้วน' },
         { status: 400 }
       );
     }
@@ -60,16 +82,17 @@ export async function POST(request: NextRequest) {
     }
     const customerId = customerRes.rows[0].customerid;
 
-    // 2. Address - insert (outside transaction, ตาราง addresses ต้องมีคอลัมน์ customerid)
-    const shippingAddressText = `${addressLine1}, ${subDistrict}, ${postalCode}, ${province}`;
-    try {
-      await pool.query(
-        `INSERT INTO addresses (addresstype, addressline1, addressline2, city, state, zipcode, isdefault, customerid)
-         VALUES ('shipping', $1, $2, $3, $4, $5, true, $6)`,
-        [addressLine1, subDistrict, subDistrict, province, postalCode, customerId]
-      );
-    } catch {
-      // ข้ามถ้า addresses ยังไม่มีคอลัมน์ customerid (รัน migration ก่อน)
+    // 2. Address - insert เฉพาะเมื่อใช้ที่อยู่ใหม่ (ไม่มี addressId)
+    if (!addressId && addressLine1?.trim() && subDistrict?.trim() && postalCode?.trim() && province?.trim()) {
+      try {
+        await pool.query(
+          `INSERT INTO addresses (addresstype, addressline1, addressline2, city, state, zipcode, isdefault, customerid)
+           VALUES ('shipping', $1, $2, $3, $4, $5, false, $6)`,
+          [addressLine1.trim(), subDistrict.trim(), subDistrict.trim(), province.trim(), postalCode.trim(), customerId]
+        );
+      } catch {
+        // ข้ามถ้า addresses ยังไม่มีคอลัมน์ customerid
+      }
     }
 
     const client = await pool.connect();
@@ -111,7 +134,7 @@ export async function POST(request: NextRequest) {
         if (variantRes.rows.length === 0) {
           await client.query('ROLLBACK');
           return NextResponse.json(
-            { error: `ไม่พบ variant สำหรับสินค้า ID ${productId}` },
+            { error: `ไม่พบ variant สำหรับสินค้า ID ${productId} หรือสินค้ารายการนี้ปิดใช้งานแล้ว` },
             { status: 400 }
           );
         }
@@ -120,17 +143,22 @@ export async function POST(request: NextRequest) {
         const unitPrice = item.price;
         const qty = Math.max(1, Math.floor(item.quantity));
 
-        // Get inventory for variant
+        // Get inventory for variant (เฉพาะ variant ที่เปิดใช้งานเท่านั้น - ไม่รับคำสั่งซื้อ variant ปิดใช้งานแม้มีของในคลัง)
         let invRes = await client.query(
-          `SELECT inventoryid, availablequantity FROM inventories
-           WHERE variantid = $1 AND availablequantity >= $2
-           ORDER BY availablequantity DESC LIMIT 1`,
+          `SELECT i.inventoryid, i.availablequantity
+           FROM inventories i
+           JOIN productvariants pv ON i.variantid = pv.variantid AND pv.isactive = true
+           WHERE i.variantid = $1 AND i.availablequantity >= $2
+           ORDER BY i.availablequantity DESC LIMIT 1`,
           [variantId, qty]
         );
 
         if (invRes.rows.length === 0) {
           invRes = await client.query(
-            'SELECT inventoryid, availablequantity FROM inventories WHERE variantid = $1 LIMIT 1',
+            `SELECT i.inventoryid, i.availablequantity
+             FROM inventories i
+             JOIN productvariants pv ON i.variantid = pv.variantid AND pv.isactive = true
+             WHERE i.variantid = $1 LIMIT 1`,
             [variantId]
           );
         }
@@ -138,7 +166,7 @@ export async function POST(request: NextRequest) {
         if (invRes.rows.length === 0) {
           await client.query('ROLLBACK');
           return NextResponse.json(
-            { error: `สินค้าไม่เพียงพอในคลัง (product ${productId})` },
+            { error: `สินค้าไม่เพียงพอในคลังหรือสินค้ารายการนี้ปิดใช้งานแล้ว (product ${productId})` },
             { status: 400 }
           );
         }
@@ -155,11 +183,11 @@ export async function POST(request: NextRequest) {
           [orderId, inventoryId, qty, unitPrice, totalPrice]
         );
 
-        // Update inventory
+        // Update inventory: availablequantity → reservedquantity (สั่งซื้อ = จองสินค้า)
         await client.query(
           `UPDATE inventories
            SET availablequantity = availablequantity - $1,
-               stockquantity = stockquantity - $1,
+               reservedquantity = reservedquantity + $1,
                updateddate = CURRENT_TIMESTAMP
            WHERE inventoryid = $2`,
           [qty, inventoryId]

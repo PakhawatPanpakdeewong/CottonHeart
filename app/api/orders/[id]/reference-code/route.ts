@@ -51,6 +51,19 @@ export async function POST(
       [referenceCode, orderIdNum]
     );
 
+    // กำหนดเวลาชำระเงิน 30 นาที - เริ่มจับเวลาตั้งแต่กดดำเนินการต่อ
+    try {
+      await pool.query(
+        `UPDATE payments
+         SET payment_deadline_at = CURRENT_TIMESTAMP + INTERVAL '30 minutes',
+             updateddate = CURRENT_TIMESTAMP
+         WHERE orderid = $1 AND paymentstatus = 'pending'`,
+        [orderIdNum]
+      );
+    } catch {
+      // payment_deadline_at column อาจยังไม่มี - รัน migration: schemas/add_payment_deadline.sql
+    }
+
     return NextResponse.json({ referenceCode, orderId: orderIdNum.toString() });
   } catch (error) {
     console.error('Reference code generation error:', error);

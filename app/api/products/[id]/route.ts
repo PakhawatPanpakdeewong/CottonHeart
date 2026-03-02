@@ -86,6 +86,18 @@ export async function GET(
       availableStock = parseInt(stockResult.rows[0]?.total || '0', 10);
     }
 
+    // Sold count: sum of QuantityOrdered from orders with completed payment
+    const soldCountResult = await pool.query(
+      `SELECT COALESCE(SUM(oi.quantityordered), 0)::int as sold_count
+       FROM order_items oi
+       JOIN inventories inv ON oi.inventoryid = inv.inventoryid
+       JOIN productvariants pv ON inv.variantid = pv.variantid
+       WHERE pv.productid = $1
+         AND oi.orderid IN (SELECT orderid FROM payments WHERE paymentstatus = 'completed')`,
+      [productId]
+    );
+    const soldCount = parseInt(soldCountResult.rows[0]?.sold_count || '0', 10);
+
     // Use first variant's SKU for images (lowest price variant)
     const primarySku = variants.length > 0 ? variants[0].sku : null;
     const imageUrl = getProductImageUrl(primarySku);
@@ -133,6 +145,34 @@ export async function GET(
       }
       mainDescription = descriptionText;
     }
+
+    // Fetch approved reviews only (isapproved = true) for display; rating is calculated from approved
+    const reviewsQuery = `
+      SELECT r.reviewid, r.rating, r.reviewtext, r.reviewdate,
+             COALESCE(LEFT(c.firstname, 1) || '***', 'ลูกค้า') as displayname
+      FROM reviews r
+      JOIN customers c ON r.customerid = c.customerid
+      WHERE r.productid = $1 AND r.isapproved = true
+      ORDER BY r.reviewdate DESC
+    `;
+    const reviewsResult = await pool.query(reviewsQuery, [productId]);
+    const reviews = reviewsResult.rows.map((r: {
+      reviewid: number;
+      rating: number;
+      reviewtext: string | null;
+      reviewdate: string;
+      displayname: string;
+    }) => ({
+      id: r.reviewid.toString(),
+      user: r.displayname || 'ลูกค้า',
+      rating: r.rating,
+      comment: r.reviewtext || '',
+      date: r.reviewdate,
+    }));
+    const totalReviews = reviews.length;
+    const avgRating = totalReviews > 0
+      ? reviews.reduce((sum: number, r: { rating: number }) => sum + r.rating, 0) / totalReviews
+      : 5.0;
 
     // Fetch similar products (same subcategory, exclude current, limit 4)
     const subCategoryId = row.subcategoryid;
@@ -183,10 +223,10 @@ export async function GET(
       })),
       availableStock,
       shippingDays: 3,
-      rating: 5.0,
-      soldCount: 0,
-      reviews: [] as { id: string; user: string; rating: number; comment: string; date: string }[],
-      totalReviews: 0,
+      rating: Math.round(avgRating * 10) / 10,
+      soldCount,
+      reviews,
+      totalReviews,
       similarProducts,
     };
 

@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { useFavorites } from '@/context/FavoritesContext';
+import { useAuth } from '@/context/AuthContext';
 import Header from '@/components/Header';
 import { ChevronUp } from 'lucide-react';
 
@@ -88,6 +89,7 @@ export default function ProductDetailPage() {
   const productId = params?.id as string;
   const { addToCart, getTotalItems, cartItems } = useCart();
   const { isFavorite, toggleFavorite } = useFavorites();
+  const { isAuthenticated } = useAuth();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -220,7 +222,7 @@ export default function ProductDetailPage() {
   const displayedReviews = product
     ? showAllReviews
       ? product.reviews
-      : product.reviews.slice(0, 2)
+      : product.reviews.slice(0, 3)
     : [];
 
   // Loading state
@@ -469,48 +471,75 @@ export default function ProductDetailPage() {
         </div>
 
         {/* Reviews */}
-        {(product.reviews?.length ?? 0) > 0 && (
-          <div className="mx-4 mt-4 px-4 py-4 bg-white rounded-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">
-                รีวิว ({product.totalReviews})
-              </h2>
-              <div className="flex items-center gap-1">
-                {[...Array(5)].map((_, i) => (
-                  <StarIcon key={i} filled={true} />
-                ))}
-                <span className="text-sm font-medium text-gray-900 ml-1">
-                  {product.rating.toFixed(1)}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {displayedReviews.map((review) => (
-                <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="flex items-center gap-1">
-                      {[...Array(5)].map((_, i) => (
-                        <StarIcon key={i} filled={i < review.rating} />
-                      ))}
-                    </div>
-                    <span className="text-xs text-gray-500">{review.user}</span>
-                  </div>
-                  <p className="text-sm text-gray-700">{review.comment}</p>
-                </div>
+        <div className="mx-4 mt-4 px-4 py-4 bg-white rounded-xl">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">
+              รีวิว ({product.totalReviews})
+            </h2>
+            <div className="flex items-center gap-1">
+              {[...Array(5)].map((_, i) => (
+                <StarIcon key={i} filled={i < Math.floor(product.rating)} />
               ))}
+              <span className="text-sm font-medium text-gray-900 ml-1">
+                {product.rating.toFixed(1)}
+              </span>
             </div>
-
-            {(product.reviews?.length ?? 0) > 2 && !showAllReviews && (
-              <button
-                onClick={() => setShowAllReviews(true)}
-                className="mt-4 text-sm text-gray-700 hover:text-gray-900 underline"
-              >
-                ดูรีวิวเพิ่มเติม
-              </button>
-            )}
           </div>
-        )}
+
+          {(product.reviews?.length ?? 0) > 0 ? (
+            <>
+              <div className="space-y-4">
+                {displayedReviews.map((review) => (
+                  <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-1">
+                        {[...Array(5)].map((_, i) => (
+                          <StarIcon key={i} filled={i < review.rating} />
+                        ))}
+                      </div>
+                      <span className="text-xs text-gray-500">{review.user}</span>
+                      {review.date && (
+                        <span className="text-xs text-gray-400">
+                          {new Date(review.date).toLocaleDateString('th-TH', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-700">{review.comment}</p>
+                  </div>
+                ))}
+              </div>
+
+              {(product.reviews?.length ?? 0) > 3 && !showAllReviews && (
+                <button
+                  onClick={() => setShowAllReviews(true)}
+                  className="mt-4 text-sm text-gray-700 hover:text-gray-900 underline"
+                >
+                  ดูรีวิวเพิ่มเติม
+                </button>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-gray-500 py-4">ยังไม่มีรีวิว</p>
+          )}
+
+          {isAuthenticated && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <Link
+                href="/profile/reviews"
+                className="text-sm text-pink-500 hover:text-pink-600 font-medium"
+              >
+                {product.totalReviews > 0 ? 'เขียนรีวิวสินค้า' : 'เป็นคนแรกที่รีวิวสินค้านี้'}
+              </Link>
+              <p className="text-xs text-gray-500 mt-1">
+                ซื้อสินค้าแล้วรีวิวได้ที่ การรีวิว ในโปรไฟล์
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* สินค้าที่คล้ายกัน - section ท้ายสุด */}
         {product.similarProducts && product.similarProducts.length > 0 && (

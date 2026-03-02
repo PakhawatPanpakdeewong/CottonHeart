@@ -141,17 +141,27 @@ export default function SearchPage() {
     fetchCategories();
   }, []);
 
-  // Search products
-  const searchProducts = async (pageNum: number = 1) => {
+  // Search products - accepts optional overrides for initial load from URL
+  const searchProducts = async (
+    pageNum: number = 1,
+    overrides?: { q?: string; category?: string; subcategory?: string; minPrice?: string; maxPrice?: string; sort?: string }
+  ) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (searchQuery) params.set('q', searchQuery);
-      if (selectedCategory) params.set('category', selectedCategory);
-      if (selectedSubCategory) params.set('subcategory', selectedSubCategory);
-      if (minPrice) params.set('minPrice', minPrice);
-      if (maxPrice) params.set('maxPrice', maxPrice);
-      if (sortBy) params.set('sort', sortBy);
+      const q = overrides?.q ?? searchQuery;
+      const cat = overrides?.category ?? selectedCategory;
+      const subCat = overrides?.subcategory ?? selectedSubCategory;
+      const min = overrides?.minPrice ?? minPrice;
+      const max = overrides?.maxPrice ?? maxPrice;
+      const sort = overrides?.sort ?? sortBy;
+
+      if (q) params.set('q', q);
+      if (cat) params.set('category', cat);
+      if (subCat) params.set('subcategory', subCat);
+      if (min) params.set('minPrice', min);
+      if (max) params.set('maxPrice', max);
+      if (sort) params.set('sort', sort);
       params.set('page', pageNum.toString());
       params.set('limit', '20');
 
@@ -172,11 +182,18 @@ export default function SearchPage() {
     }
   };
 
-  // Initial search - รวมถึงเมื่อมี sort=new จาก URL
+  // Initial search - ใช้ searchParams จาก URL โดยตรง เพื่อให้แน่ใจว่าค่าถูกต้องแม้ state ยังไม่ sync
   useEffect(() => {
-    if (searchParams.get('q') || searchParams.get('category') || searchParams.get('subcategory') || searchParams.get('minPrice') || searchParams.get('maxPrice') || searchParams.get('sort')) {
-      searchProducts(1);
+    const q = searchParams.get('q');
+    const cat = searchParams.get('category');
+    const subCat = searchParams.get('subcategory');
+    const min = searchParams.get('minPrice');
+    const max = searchParams.get('maxPrice');
+    const sort = searchParams.get('sort');
+    if (q || cat || subCat || min || max || sort) {
+      searchProducts(1, { q: q ?? undefined, category: cat ?? undefined, subcategory: subCat ?? undefined, minPrice: min ?? undefined, maxPrice: max ?? undefined, sort: sort ?? undefined });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- รันครั้งเดียวเมื่อโหลดหน้า
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {

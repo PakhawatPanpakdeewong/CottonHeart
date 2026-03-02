@@ -30,6 +30,18 @@ function getEstimatedDeliveryDate(): { start: Date; end: Date } {
   return { start, end };
 }
 
+function deduplicateAddresses<T extends { addressLine1?: string; subDistrict?: string; postalCode?: string; province?: string }>(
+  addrs: T[]
+): T[] {
+  const seen = new Set<string>();
+  return addrs.filter((a) => {
+    const key = `${a.addressLine1 || ''}|${a.subDistrict || ''}|${a.postalCode || ''}|${a.province || ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // แปลงเป็นรูปแบบ พ.ศ. (พุทธศักราช)
 function formatBuddhistDate(date: Date): string {
   const buddhistYear = date.getFullYear() + 543;
@@ -62,6 +74,16 @@ export default function DeliveryPage() {
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [addresses, setAddresses] = useState<Array<{
+    id: number;
+    addressLine1: string;
+    subDistrict: string;
+    postalCode: string;
+    province: string;
+    isDefault: boolean;
+  }>>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+  const [useNewAddress, setUseNewAddress] = useState(false);
   const [addressLine1, setAddressLine1] = useState('');
   const [subDistrict, setSubDistrict] = useState('');
   const [postalCode, setPostalCode] = useState('');
@@ -83,7 +105,6 @@ export default function DeliveryPage() {
 
       const fetchData = async () => {
         try {
-          // ดึงชื่อและเบอร์โทรจาก customers
           const profileRes = await fetch(`/api/users/profile?email=${encodeURIComponent(email)}`);
           if (profileRes.ok) {
             const profile = await profileRes.json();
@@ -91,19 +112,25 @@ export default function DeliveryPage() {
             if (profile.phone) setPhone(profile.phone);
           }
 
-          // ดึงที่อยู่จากตาราง address (ถ้ามี)
           const addressRes = await fetch(`/api/users/address?email=${encodeURIComponent(email)}`);
           if (addressRes.ok) {
-            const { address } = await addressRes.json();
-            if (address) {
-              if (address.addressLine1) setAddressLine1(address.addressLine1);
-              if (address.subDistrict) setSubDistrict(address.subDistrict);
-              if (address.postalCode) setPostalCode(address.postalCode);
-              if (address.province) setProvince(address.province);
+            const { addresses: addrs } = await addressRes.json();
+            if (addrs?.length > 0) {
+              const uniqueAddrs = deduplicateAddresses(addrs);
+              setAddresses(uniqueAddrs);
+              const defaultAddr = uniqueAddrs.find((a: { isDefault: boolean }) => a.isDefault) || uniqueAddrs[0];
+              setSelectedAddressId(defaultAddr.id);
+              setUseNewAddress(false);
+              setAddressLine1(defaultAddr.addressLine1 || '');
+              setSubDistrict(defaultAddr.subDistrict || '');
+              setPostalCode(defaultAddr.postalCode || '');
+              setProvince(defaultAddr.province || '');
+            } else {
+              setUseNewAddress(true);
             }
           }
         } catch {
-          // ignore - ใช้ค่าเริ่มต้นว่าง
+          // ignore
         }
       };
       fetchData();
@@ -188,10 +215,11 @@ export default function DeliveryPage() {
           email,
           fullName,
           phone,
-          addressLine1,
-          subDistrict,
-          postalCode,
-          province,
+          addressId: useNewAddress ? undefined : selectedAddressId,
+          addressLine1: useNewAddress ? addressLine1 : undefined,
+          subDistrict: useNewAddress ? subDistrict : undefined,
+          postalCode: useNewAddress ? postalCode : undefined,
+          province: useNewAddress ? province : undefined,
           items: selectedItems.map((item) => ({
             id: item.id,
             sku: item.sku,
@@ -379,80 +407,153 @@ export default function DeliveryPage() {
               )}
             </div>
 
-            {/* ที่อยู่ */}
+            {/* เลือกที่อยู่จัดส่ง */}
             <div className="space-y-3">
-              <p className="text-sm font-medium text-gray-700">ที่อยู่*</p>
+              <p className="text-sm font-medium text-gray-700">สถานที่จัดส่ง*</p>
 
-              <div>
-                <Input
-                  value={addressLine1}
-                  onChange={(e) => {
-                    setAddressLine1(e.target.value);
-                    setErrors((prev) => ({ ...prev, addressLine1: undefined }));
-                  }}
-                  placeholder="บ้านเลขที่ ที่อยู่ถนน อพาร์ตเมนต์ ห้องชุด ชั้น ฯลฯ"
-                  className={`h-11 placeholder:text-gray-250 ${errors.addressLine1 ? 'border-red-500' : ''}`}
-                />
-                {errors.addressLine1 && (
-                  <p className="text-red-500 text-sm mt-1">{errors.addressLine1}</p>
-                )}
-              </div>
-
-              <div>
-                <Input
-                  value={subDistrict}
-                  onChange={(e) => {
-                    setSubDistrict(e.target.value);
-                    setErrors((prev) => ({ ...prev, subDistrict: undefined }));
-                  }}
-                  placeholder="แขวงและเขต ตำบลและอำเภอ"
-                  className={`h-11 placeholder:text-gray-250 ${errors.subDistrict ? 'border-red-500' : ''}`}
-                />
-                {errors.subDistrict && (
-                  <p className="text-red-500 text-sm mt-1">{errors.subDistrict}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Input
-                    value={postalCode}
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/\D/g, '').slice(0, 5);
-                      setPostalCode(v);
-                      setErrors((prev) => ({ ...prev, postalCode: undefined }));
-                    }}
-                    placeholder="รหัสไปรษณีย์"
-                    className={`h-11 placeholder:text-gray-250 ${errors.postalCode ? 'border-red-500' : ''}`}
-                  />
-                  {errors.postalCode && (
-                    <p className="text-red-500 text-sm mt-1">{errors.postalCode}</p>
-                  )}
-                </div>
-                <div>
-                  <Select
-                    value={province || undefined}
-                    onValueChange={(v) => {
-                      setProvince(v);
-                      setErrors((prev) => ({ ...prev, province: undefined }));
-                    }}
+              {addresses.length > 0 && (
+                <div className="space-y-2">
+                  {addresses.map((addr) => {
+                    const addrStr = [addr.addressLine1, addr.subDistrict, addr.postalCode, addr.province].filter(Boolean).join(', ');
+                    const isSelected = !useNewAddress && selectedAddressId === addr.id;
+                    return (
+                      <label
+                        key={addr.id}
+                        className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                          isSelected ? 'border-pink-500 bg-pink-50/50' : 'border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="shippingAddress"
+                          checked={isSelected}
+                          onChange={() => {
+                            setUseNewAddress(false);
+                            setSelectedAddressId(addr.id);
+                            setAddressLine1(addr.addressLine1);
+                            setSubDistrict(addr.subDistrict);
+                            setPostalCode(addr.postalCode);
+                            setProvince(addr.province);
+                            setErrors((prev) => ({ ...prev, addressLine1: undefined, subDistrict: undefined, postalCode: undefined, province: undefined }));
+                          }}
+                          className="mt-1 w-4 h-4 text-pink-500 border-gray-300 focus:ring-pink-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-900">{addrStr}</p>
+                          {addr.isDefault && (
+                            <span className="inline-block mt-1 text-xs text-pink-500 font-medium">ที่อยู่หลัก</span>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
+                  <label
+                    className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                      useNewAddress ? 'border-pink-500 bg-pink-50/50' : 'border-gray-200 hover:bg-gray-50'
+                    }`}
                   >
-                    <SelectTrigger className={`h-11 [&_span[data-placeholder]]:text-gray-250 ${errors.province ? 'border-red-500' : ''}`}>
-                      <SelectValue placeholder="จังหวัด" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {THAI_PROVINCES.map((p) => (
-                        <SelectItem key={p} value={p}>
-                          {p}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.province && (
-                    <p className="text-red-500 text-sm mt-1">{errors.province}</p>
-                  )}
+                    <input
+                      type="radio"
+                      name="shippingAddress"
+                      checked={useNewAddress}
+                      onChange={() => {
+                        setUseNewAddress(true);
+                        setSelectedAddressId(null);
+                        setAddressLine1('');
+                        setSubDistrict('');
+                        setPostalCode('');
+                        setProvince('');
+                        setErrors((prev) => ({ ...prev, addressLine1: undefined, subDistrict: undefined, postalCode: undefined, province: undefined }));
+                      }}
+                      className="mt-1 w-4 h-4 text-pink-500 border-gray-300 focus:ring-pink-500"
+                    />
+                    <span className="text-sm font-medium text-gray-900">ใช้ที่อยู่ใหม่</span>
+                  </label>
                 </div>
-              </div>
+              )}
+
+              {(useNewAddress || addresses.length === 0) && (
+                <div className="space-y-3 pt-2 border-t border-gray-100">
+                  <p className="text-sm text-gray-600">กรอกที่อยู่การจัดส่ง</p>
+                  <div>
+                    <Input
+                      value={addressLine1}
+                      onChange={(e) => {
+                        setAddressLine1(e.target.value);
+                        setErrors((prev) => ({ ...prev, addressLine1: undefined }));
+                      }}
+                      placeholder="บ้านเลขที่ ที่อยู่ถนน อพาร์ตเมนต์ ห้องชุด ชั้น ฯลฯ"
+                      className={`h-11 placeholder:text-gray-250 ${errors.addressLine1 ? 'border-red-500' : ''}`}
+                    />
+                    {errors.addressLine1 && (
+                      <p className="text-red-500 text-sm mt-1">{errors.addressLine1}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Input
+                      value={subDistrict}
+                      onChange={(e) => {
+                        setSubDistrict(e.target.value);
+                        setErrors((prev) => ({ ...prev, subDistrict: undefined }));
+                      }}
+                      placeholder="แขวงและเขต ตำบลและอำเภอ"
+                      className={`h-11 placeholder:text-gray-250 ${errors.subDistrict ? 'border-red-500' : ''}`}
+                    />
+                    {errors.subDistrict && (
+                      <p className="text-red-500 text-sm mt-1">{errors.subDistrict}</p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Input
+                        value={postalCode}
+                        onChange={(e) => {
+                          const v = e.target.value.replace(/\D/g, '').slice(0, 5);
+                          setPostalCode(v);
+                          setErrors((prev) => ({ ...prev, postalCode: undefined }));
+                        }}
+                        placeholder="รหัสไปรษณีย์"
+                        className={`h-11 placeholder:text-gray-250 ${errors.postalCode ? 'border-red-500' : ''}`}
+                      />
+                      {errors.postalCode && (
+                        <p className="text-red-500 text-sm mt-1">{errors.postalCode}</p>
+                      )}
+                    </div>
+                    <div>
+                      <Select
+                        value={province || undefined}
+                        onValueChange={(v) => {
+                          setProvince(v);
+                          setErrors((prev) => ({ ...prev, province: undefined }));
+                        }}
+                      >
+                        <SelectTrigger className={`h-11 [&_span[data-placeholder]]:text-gray-250 ${errors.province ? 'border-red-500' : ''}`}>
+                          <SelectValue placeholder="จังหวัด" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {THAI_PROVINCES.map((p) => (
+                            <SelectItem key={p} value={p}>
+                              {p}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.province && (
+                        <p className="text-red-500 text-sm mt-1">{errors.province}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {addresses.length > 0 && (
+                <Link
+                  href="/profile/edit"
+                  className="inline-block text-sm text-pink-500 hover:text-pink-600 font-medium"
+                >
+                  จัดการที่อยู่การจัดส่ง
+                </Link>
+              )}
             </div>
 
             {/* วิธีการจัดส่ง */}

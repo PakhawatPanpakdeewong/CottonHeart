@@ -16,6 +16,7 @@ export interface CartItem {
 interface CartContextType {
   cartItems: CartItem[];
   addToCart: (item: Omit<CartItem, 'quantity'>) => void;
+  addToCartWithQuantity: (item: Omit<CartItem, 'quantity'>, quantity: number) => void;
   removeFromCart: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   clearCart: () => void;
@@ -63,13 +64,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const addToCart = (item: Omit<CartItem, 'quantity'>) => {
     setCartItems((prevItems) => {
-      const existingItem = prevItems.find((i) => i.id === item.id);
+      const existingItem = prevItems.find((i) => i.id === item.id && (i.sku ?? '') === (item.sku ?? ''));
       if (existingItem) {
         return prevItems.map((i) =>
-          i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+          i.id === item.id && (i.sku ?? '') === (item.sku ?? '')
+            ? { ...i, quantity: i.quantity + 1 }
+            : i
         );
       }
       return [...prevItems, { ...item, quantity: 1 }];
+    });
+  };
+
+  const addToCartWithQuantity = (item: Omit<CartItem, 'quantity'>, quantity: number) => {
+    if (quantity <= 0) return;
+    setCartItems((prevItems) => {
+      const existingItem = prevItems.find((i) => i.id === item.id && (i.sku ?? '') === (item.sku ?? ''));
+      if (existingItem) {
+        return prevItems.map((i) =>
+          i.id === item.id && (i.sku ?? '') === (item.sku ?? '')
+            ? { ...i, quantity: i.quantity + quantity }
+            : i
+        );
+      }
+      return [...prevItems, { ...item, quantity }];
     });
   };
 
@@ -147,6 +165,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       value={{
         cartItems,
         addToCart,
+        addToCartWithQuantity,
         removeFromCart,
         updateQuantity,
         clearCart,

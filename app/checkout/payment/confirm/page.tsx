@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import Header from '@/components/Header';
-import { CheckCircle, MessageCircle, ExternalLink, ChevronUp } from 'lucide-react';
+import { CheckCircle, MessageCircle, ExternalLink, ChevronUp, Check } from 'lucide-react';
 
 const SHIPPING_COST = 50;
 
@@ -20,10 +20,11 @@ interface OrderDetail {
   referenceCode: string | null;
   shippingAddress?: string;
   recipientName?: string;
+  paymentDeadlineAt?: string | null;
 }
 
-const LINE_URL = 'https://line.me/R/ti/p/@cottonheart';
-const MESSENGER_URL = 'https://m.me/cottonheart';
+const LINE_URL = 'https://line.me/R/ti/p/@040gdsbn';
+const MESSENGER_URL = 'https://www.facebook.com/people/KiddyCare/61577838044872/';
 
 export default function PaymentConfirmPage() {
   const router = useRouter();
@@ -33,6 +34,8 @@ export default function PaymentConfirmPage() {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [timeLeft, setTimeLeft] = useState<{ min: number; sec: number } | null>(null);
+  const [expired, setExpired] = useState(false);
 
   const email = useMemo(() => {
     if (!user) return '';
@@ -71,11 +74,34 @@ export default function PaymentConfirmPage() {
           referenceCode: o.referenceCode || null,
           shippingAddress: o.shippingAddress,
           recipientName: o.recipientName,
+          paymentDeadlineAt: o.paymentDeadlineAt || null,
         });
       })
       .catch((err) => setError(err.message || 'เกิดข้อผิดพลาด'))
       .finally(() => setLoading(false));
   }, [isAuthenticated, user, orderId, email]);
+
+  // Countdown timer - สูงสุด 30 นาที นับถอยหลัง
+  useEffect(() => {
+    if (!order?.paymentDeadlineAt) return;
+    const deadline = new Date(order.paymentDeadlineAt).getTime();
+    const MAX_SECONDS = 30 * 60; // 30 นาที
+    const tick = () => {
+      const now = Date.now();
+      let diff = Math.floor((deadline - now) / 1000);
+      if (diff <= 0) {
+        setExpired(true);
+        setTimeLeft({ min: 0, sec: 0 });
+        return;
+      }
+      // จำกัดสูงสุด 30 นาที (แก้ปัญหา timezone ที่อาจทำให้แสดงผิด)
+      diff = Math.min(diff, MAX_SECONDS);
+      setTimeLeft({ min: Math.floor(diff / 60), sec: diff % 60 });
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [order?.paymentDeadlineAt]);
 
   if (isLoading || !isAuthenticated) {
     return (
@@ -198,6 +224,27 @@ export default function PaymentConfirmPage() {
           <p className="text-sm text-gray-600 mb-3">
             โปรดจำตัวเลขเหล่านี้เพื่อใช้ในการยืนยันออร์เดอร์ โดยเมื่อโอนชำระเสร็จสิ้นให้ส่งสลิปการโอนในเว็บไซต์หรือแชทของร้านค้า
           </p>
+          {(order.paymentDeadlineAt && (timeLeft != null || expired)) && (
+            <div className="mb-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <p className="text-sm font-medium text-amber-800">
+                เหลือเวลาชำระเงิน:{' '}
+                <span className="font-mono font-bold">
+                  {expired ? (
+                    <span className="text-red-600">หมดเวลา</span>
+                  ) : timeLeft ? (
+                    `${timeLeft.min} นาที ${timeLeft.sec} วินาที`
+                  ) : (
+                    '—'
+                  )}
+                </span>
+              </p>
+              {expired && (
+                <p className="text-xs text-red-600 mt-1">
+                  ออเดอร์อาจถูกยกเลิกอัตโนมัติ กรุณาติดต่อแอดมินหากต้องการชำระเงิน
+                </p>
+              )}
+            </div>
+          )}
           <p className="text-xs text-red-500 font-medium">
             *ต้องส่งหลักฐานการชำระเงินภายใน 30 นาที ถ้าทำไม่เสร็จสิ้นกรุณาติดต่อแอดมิน
           </p>
@@ -226,10 +273,11 @@ export default function PaymentConfirmPage() {
             <ExternalLink className="w-4 h-4" />
           </a>
           <Link
-            href={`/orders/${orderId}`}
+            href="/profile"
             className="flex items-center justify-center gap-2 w-full py-3.5 bg-pink-500 text-white rounded-lg font-semibold hover:bg-pink-600 transition-colors"
           >
-            เพิ่มหลักฐานการชำระเงินบนเว็บไซต์
+            <Check className="w-5 h-5" />
+            เสร็จสิ้น
           </Link>
         </div>
 

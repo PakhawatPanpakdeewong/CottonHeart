@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
 
     // Build the query dynamically
+    // ค้นเฉพาะชื่อ TH/EN, แสดงเฉพาะ isActive=true และ stock > 0
     let query = `
       SELECT DISTINCT ON (p.productid)
         p.productid,
@@ -43,18 +44,23 @@ export async function GET(request: NextRequest) {
       LEFT JOIN subcategories sc ON p.subcategoryid = sc.subcategoryid
       LEFT JOIN categories c ON sc.categoryid = c.categoryid
       INNER JOIN productvariants pv ON p.productid = pv.productid AND pv.isactive = true
+      INNER JOIN (
+        SELECT variantid
+        FROM inventories
+        GROUP BY variantid
+        HAVING SUM(availablequantity) > 0
+      ) inv ON pv.variantid = inv.variantid
       WHERE 1=1
     `;
 
     const queryParams: any[] = [];
     let paramIndex = 1;
 
-    // Search by name or SKU
+    // Search by product name (Thai or English only)
     if (searchQuery) {
       query += ` AND (
         LOWER(p.productnameth) LIKE LOWER($${paramIndex}) OR
-        LOWER(p.productnameen) LIKE LOWER($${paramIndex}) OR
-        LOWER(pv.sku) LIKE LOWER($${paramIndex})
+        LOWER(p.productnameen) LIKE LOWER($${paramIndex})
       )`;
       queryParams.push(`%${searchQuery}%`);
       paramIndex++;
