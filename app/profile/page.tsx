@@ -266,13 +266,15 @@ export default function ProfilePage() {
             <FileText className="w-4 h-4" />
             ข้อมูลส่วนตัวเพิ่มเติม
           </Link>
-          <Link
-            href="/contact"
+          <a
+            href={process.env.NEXT_PUBLIC_LINE_URL || 'https://line.me'}
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 py-3 px-4 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
           >
             <MessageCircle className="w-4 h-4" />
             ติดต่อกับร้านค้า
-          </Link>
+          </a>
           <button
             type="button"
             onClick={() => {

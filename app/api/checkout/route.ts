@@ -6,6 +6,7 @@ const SHIPPING_COST = 50;
 interface CartItemInput {
   id: string; // product id
   sku?: string | null;
+  variantId?: number;
   quantity: number;
   price: number;
 }

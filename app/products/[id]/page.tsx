@@ -204,6 +204,7 @@ export default function ProductDetailPage() {
       : (product.images?.[0] && product.images[0] !== PLACEHOLDER_IMAGE
         ? product.images[0]
         : (product.image && product.image !== PLACEHOLDER_IMAGE ? product.image : null));
+    const firstVariant = product.variants?.[0];
     addToCart({
       id: product.id,
       name: product.name,
@@ -211,7 +212,8 @@ export default function ProductDetailPage() {
       originalPrice: product.originalPrice ?? undefined,
       image: resolvedUrl,
       category: product.category ?? null,
-      sku: product.variants?.[0]?.sku,
+      sku: firstVariant?.sku,
+      variantId: firstVariant?.id,
     });
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3000);
@@ -435,18 +437,27 @@ export default function ProductDetailPage() {
             {/* Price & Stock */}
             <div className="pt-4 border-t border-gray-100">
               <p className="text-xs text-gray-500 mb-1">ราคาสินค้า</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {product.price.toFixed(2)} บาท
-              </p>
+              <div className="flex items-baseline gap-2 flex-wrap">
+                {product.originalPrice != null && product.originalPrice > product.price && (
+                  <>
+                    <p className="text-lg text-gray-500 line-through">
+                      {product.originalPrice.toFixed(2)} บาท
+                    </p>
+                    {product.discountPercent != null && (
+                      <span className="px-2 py-0.5 bg-red-500 text-white text-sm font-semibold rounded">
+                        ลด {product.discountPercent}%
+                      </span>
+                    )}
+                  </>
+                )}
+                <p className="text-2xl font-bold text-gray-900">
+                  {product.price.toFixed(2)} บาท
+                </p>
+              </div>
               {isOutOfStock ? (
                 <p className="text-sm text-red-500 mt-2 font-medium">สินค้าหมด</p>
               ) : (
                 <p className="text-sm text-gray-500 mt-1">คงเหลือ {availableStock} ชิ้น</p>
-              )}
-              {product.originalPrice && (
-                <p className="text-sm text-gray-500 line-through mt-0.5">
-                  จาก {product.originalPrice.toFixed(2)} บาท
-                </p>
               )}
             </div>
           </div>

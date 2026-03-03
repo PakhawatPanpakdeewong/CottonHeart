@@ -74,6 +74,30 @@ export async function GET(
     const variantsResult = await pool.query(variantsQuery, [productId]);
     const variants = variantsResult.rows;
 
+    // Fetch active discounts for variants (discounts.variantid)
+    const variantIds = variants.map((v: { variantid: number }) => v.variantid);
+    let variantDiscounts: Record<number, { discountId: number; discountType: string; discountValue: number; maximumDiscountAmount: number | null }> = {};
+    if (variantIds.length > 0) {
+      const discountRes = await pool.query(
+        `SELECT discountid, variantid, discounttype, discountvalue, maximumdiscountamount
+         FROM discounts
+         WHERE variantid = ANY($1)
+           AND isactive = true
+           AND startdate <= CURRENT_TIMESTAMP
+           AND enddate >= CURRENT_TIMESTAMP
+           AND (usagelimit IS NULL OR usedcount < usagelimit)`,
+        [variantIds]
+      );
+      discountRes.rows.forEach((r: { variantid: number; discountid: number; discounttype: string; discountvalue: string; maximumdiscountamount: string | null }) => {
+        variantDiscounts[r.variantid] = {
+          discountId: r.discountid,
+          discountType: r.discounttype,
+          discountValue: parseFloat(r.discountvalue),
+          maximumDiscountAmount: r.maximumdiscountamount ? parseFloat(r.maximumdiscountamount) : null,
+        };
+      });
+    }
+
     // Sum available stock across all variants
     let availableStock = 0;
     if (variants.length > 0) {
@@ -200,6 +224,30 @@ export async function GET(
       }));
     }
 
+    // คำนวณราคาและส่วนลดสำหรับ variant แรก (default)
+    const firstVariant = variants[0];
+    let price = variants.length > 0 ? parseFloat(firstVariant.price) : 0;
+    let originalPrice: number | null = null;
+    let discountPercent: number | null = null;
+    let discountId: number | null = null;
+
+    if (firstVariant && variantDiscounts[firstVariant.variantid]) {
+      const d = variantDiscounts[firstVariant.variantid];
+      discountId = d.discountId;
+      originalPrice = price;
+      if (d.discountType === 'percentage') {
+        discountPercent = d.discountValue;
+        price = price * (1 - d.discountValue / 100);
+        if (d.maximumDiscountAmount && (originalPrice - price) > d.maximumDiscountAmount) {
+          price = originalPrice - d.maximumDiscountAmount;
+          discountPercent = originalPrice > 0 ? Math.round((d.maximumDiscountAmount / originalPrice) * 100) : 0;
+        }
+      } else if (d.discountType === 'fixed_amount') {
+        price = Math.max(0, price - d.discountValue);
+        discountPercent = originalPrice > 0 ? Math.round((d.discountValue / originalPrice) * 100) : 0;
+      }
+    }
+
     const product = {
       id: row.productid.toString(),
       name: row.productnameth || row.productnameen,
@@ -208,19 +256,45 @@ export async function GET(
       category: row.subcategorynameth || row.subcategorynameen,
       subcategoryId: row.subcategoryid,
       brand: row.brandnameth || row.brandnameen,
-      price: variants.length > 0 ? parseFloat(variants[0].price) : 0,
-      originalPrice: null as number | null,
-      discountPercent: null as number | null,
+      price,
+      originalPrice,
+      discountPercent,
+      discountId,
       image: imageUrl,
       images: imageSlots.length > 0 ? imageSlots.map((slot) => slot[0]) : (imageUrl ? [imageUrl] : []),
       imageSlots: imageSlots.length > 0 ? imageSlots : undefined,
       specifications,
       contentBlocks,
-      variants: variants.map((v: { variantid: number; sku: string; price: string }) => ({
-        id: v.variantid,
-        sku: v.sku,
-        price: parseFloat(v.price),
-      })),
+      variants: variants.map((v: { variantid: number; sku: string; price: string }) => {
+        let vPrice = parseFloat(v.price);
+        let vOriginal: number | null = null;
+        let vDiscountPct: number | null = null;
+        let vDiscountId: number | null = null;
+        if (variantDiscounts[v.variantid]) {
+          const d = variantDiscounts[v.variantid];
+          vDiscountId = d.discountId;
+          vOriginal = vPrice;
+          if (d.discountType === 'percentage') {
+            vDiscountPct = d.discountValue;
+            vPrice = vPrice * (1 - d.discountValue / 100);
+            if (d.maximumDiscountAmount && (vOriginal - vPrice) > d.maximumDiscountAmount) {
+              vPrice = vOriginal - d.maximumDiscountAmount;
+              vDiscountPct = vOriginal > 0 ? Math.round((d.maximumDiscountAmount / vOriginal) * 100) : 0;
+            }
+          } else if (d.discountType === 'fixed_amount') {
+            vPrice = Math.max(0, vPrice - d.discountValue);
+            vDiscountPct = vOriginal > 0 ? Math.round((d.discountValue / vOriginal) * 100) : 0;
+          }
+        }
+        return {
+          id: v.variantid,
+          sku: v.sku,
+          price: vPrice,
+          originalPrice: vOriginal,
+          discountPercent: vDiscountPct,
+          discountId: vDiscountId,
+        };
+      }),
       availableStock,
       shippingDays: 3,
       rating: Math.round(avgRating * 10) / 10,

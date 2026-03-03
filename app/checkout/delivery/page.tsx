@@ -66,7 +66,7 @@ interface FormErrors {
 }
 
 export default function DeliveryPage() {
-  const { cartItems, getSelectedItems, getSelectedTotalPrice, removeFromCart } = useCart();
+  const { cartItems, getSelectedItems, getSelectedTotalPrice, removeCartItem } = useCart();
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const router = useRouter();
   const firstErrorRef = useRef<HTMLDivElement | null>(null);
@@ -225,6 +225,7 @@ export default function DeliveryPage() {
             sku: item.sku,
             quantity: item.quantity,
             price: item.price,
+            variantId: item.variantId,
           })),
         }),
       });
@@ -241,7 +242,7 @@ export default function DeliveryPage() {
       }
       checkoutSuccessRef.current = true;
       router.push(data.orderId ? `/checkout/payment?orderId=${data.orderId}` : '/checkout/payment');
-      selectedItems.forEach((item) => removeFromCart(item.id));
+      selectedItems.forEach((item) => removeCartItem(item));
     } catch {
       setErrors({ confirmed: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง' });
     } finally {

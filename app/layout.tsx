@@ -3,6 +3,7 @@ import "./globals.css";
 import { CartProvider } from "@/context/CartContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { FavoritesProvider } from "@/context/FavoritesContext";
+import { CompareProvider } from "@/context/CompareContext";
 
 export const metadata: Metadata = {
   title: "Cottonheart - E-commerce Mobile Website",
@@ -19,7 +20,9 @@ export default function RootLayout({
       <body className="antialiased">
         <AuthProvider>
           <CartProvider>
-            <FavoritesProvider>{children}</FavoritesProvider>
+            <FavoritesProvider>
+            <CompareProvider>{children}</CompareProvider>
+          </FavoritesProvider>
           </CartProvider>
         </AuthProvider>
       </body>

@@ -311,6 +311,7 @@ CREATE TABLE IF NOT EXISTS SalesSummary (
 );
 
 -- Discounts table
+-- variantid: สินค้าที่เข้าร่วมรายการส่วนลด (เชื่อมกับ ProductVariants)
 CREATE TABLE IF NOT EXISTS Discounts (
     DiscountID SERIAL PRIMARY KEY,
     DiscountCode VARCHAR(50) UNIQUE NOT NULL,
@@ -323,7 +324,8 @@ CREATE TABLE IF NOT EXISTS Discounts (
     UsageLimit INTEGER,
     UsedCount INTEGER DEFAULT 0 CHECK (UsedCount >= 0),
     IsActive BOOLEAN DEFAULT true,
-    CreatedDate TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    CreatedDate TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    VariantID INTEGER REFERENCES ProductVariants(VariantID) ON DELETE SET NULL
 );
 
 -- Cancellation table

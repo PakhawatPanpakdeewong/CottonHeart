@@ -11,6 +11,7 @@ export interface CartItem {
   image?: string | null;
   sku?: string | null;
   category?: string | null;
+  variantId?: number;
 }
 
 interface CartContextType {
@@ -18,6 +19,7 @@ interface CartContextType {
   addToCart: (item: Omit<CartItem, 'quantity'>) => void;
   addToCartWithQuantity: (item: Omit<CartItem, 'quantity'>, quantity: number) => void;
   removeFromCart: (id: string) => void;
+  removeCartItem: (item: CartItem) => void;
   updateQuantity: (id: string, quantity: number) => void;
   clearCart: () => void;
   getTotalItems: () => number;
@@ -64,10 +66,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const addToCart = (item: Omit<CartItem, 'quantity'>) => {
     setCartItems((prevItems) => {
-      const existingItem = prevItems.find((i) => i.id === item.id && (i.sku ?? '') === (item.sku ?? ''));
+      const existingItem = prevItems.find(
+        (i) => i.id === item.id && (i.sku ?? '') === (item.sku ?? '') && (i.variantId ?? 0) === (item.variantId ?? 0)
+      );
       if (existingItem) {
         return prevItems.map((i) =>
-          i.id === item.id && (i.sku ?? '') === (item.sku ?? '')
+          i.id === item.id && (i.sku ?? '') === (item.sku ?? '') && (i.variantId ?? 0) === (item.variantId ?? 0)
             ? { ...i, quantity: i.quantity + 1 }
             : i
         );
@@ -79,10 +83,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addToCartWithQuantity = (item: Omit<CartItem, 'quantity'>, quantity: number) => {
     if (quantity <= 0) return;
     setCartItems((prevItems) => {
-      const existingItem = prevItems.find((i) => i.id === item.id && (i.sku ?? '') === (item.sku ?? ''));
+      const existingItem = prevItems.find(
+        (i) => i.id === item.id && (i.sku ?? '') === (item.sku ?? '') && (i.variantId ?? 0) === (item.variantId ?? 0)
+      );
       if (existingItem) {
         return prevItems.map((i) =>
-          i.id === item.id && (i.sku ?? '') === (item.sku ?? '')
+          i.id === item.id && (i.sku ?? '') === (item.sku ?? '') && (i.variantId ?? 0) === (item.variantId ?? 0)
             ? { ...i, quantity: i.quantity + quantity }
             : i
         );
@@ -96,6 +102,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setSelectedItemIds((prev) => {
       const next = new Set(prev);
       next.delete(id);
+      return next;
+    });
+  };
+
+  const removeCartItem = (target: CartItem) => {
+    setCartItems((prevItems) =>
+      prevItems.filter(
+        (item) =>
+          !(
+            item.id === target.id &&
+            (item.sku ?? '') === (target.sku ?? '') &&
+            (item.variantId ?? 0) === (target.variantId ?? 0)
+          )
+      )
+    );
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      next.delete(target.id);
       return next;
     });
   };
@@ -167,6 +191,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         addToCart,
         addToCartWithQuantity,
         removeFromCart,
+        removeCartItem,
         updateQuantity,
         clearCart,
         getTotalItems,

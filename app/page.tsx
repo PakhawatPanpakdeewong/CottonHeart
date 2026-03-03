@@ -16,13 +16,19 @@ interface ProductCardProps {
   originalPrice?: string;
   image?: string | null;
   category?: string | null;
+  discountLabel?: string;
 }
 
-const ProductCard = ({ id, name, price, originalPrice, image, category }: ProductCardProps) => (
+const ProductCard = ({ id, name, price, originalPrice, image, category, discountLabel }: ProductCardProps) => (
   <Link
     href={`/products/${id}`}
-    className="block bg-white rounded-lg shadow-sm border border-gray-100 p-4 flex flex-col hover:border-pink-200 transition-colors"
+    className="block bg-white rounded-lg shadow-sm border border-gray-100 p-4 flex flex-col hover:border-pink-200 transition-colors relative"
   >
+    {discountLabel && (
+      <span className="absolute top-2 right-2 z-10 px-2 py-0.5 bg-red-500 text-white text-xs font-semibold rounded-full">
+        {discountLabel}
+      </span>
+    )}
     <div className="w-full h-40 bg-gray-100 rounded-lg flex items-center justify-center mb-3 overflow-hidden">
       {image ? (
         <img
@@ -117,6 +123,10 @@ export default function Home() {
   const [loadingNew, setLoadingNew] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [loadingOrdered, setLoadingOrdered] = useState(false);
+  const [discountedProducts, setDiscountedProducts] = useState<
+    { id: string; name: string; price: string; originalPrice: string; image: string | null; category: string | null; discountLabel: string }[]
+  >([]);
+  const [loadingDiscounted, setLoadingDiscounted] = useState(true);
   const [errorRecommended, setErrorRecommended] = useState<string | null>(null);
   const [errorNew, setErrorNew] = useState<string | null>(null);
   const { getTotalItems } = useCart();
@@ -164,6 +174,25 @@ export default function Home() {
     };
 
     fetchNewProducts();
+  }, []);
+
+  // Fetch discounted products (สินค้าที่เข้าร่วมรายการส่วนลด)
+  useEffect(() => {
+    const fetchDiscountedProducts = async () => {
+      try {
+        setLoadingDiscounted(true);
+        const response = await fetch('/api/products/discounted');
+        if (response.ok) {
+          const data = await response.json();
+          setDiscountedProducts(data.products || []);
+        }
+      } catch {
+        setDiscountedProducts([]);
+      } finally {
+        setLoadingDiscounted(false);
+      }
+    };
+    fetchDiscountedProducts();
   }, []);
 
   // Fetch categories from database
@@ -335,6 +364,38 @@ export default function Home() {
             ) : (
               <div className="text-center py-8 text-gray-500 text-sm bg-white rounded-xl border border-gray-100">
                 คุณยังไม่มีประวัติการสั่งซื้อ
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* สินค้าที่มีส่วนลด - จากตาราง Discounts */}
+        {(loadingDiscounted || discountedProducts.length > 0) && (
+          <section>
+            <SectionHeader
+              title="สินค้าที่มีส่วนลด"
+              linkText="ดูเพิ่มเติม"
+              linkHref="/search"
+            />
+            {loadingDiscounted ? (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-100 rounded-lg h-64 animate-pulse" />
+                <div className="bg-gray-100 rounded-lg h-64 animate-pulse" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {discountedProducts.slice(0, 6).map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    id={product.id}
+                    name={product.name}
+                    price={product.price}
+                    originalPrice={product.originalPrice}
+                    image={product.image}
+                    category={product.category}
+                    discountLabel={product.discountLabel}
+                  />
+                ))}
               </div>
             )}
           </section>

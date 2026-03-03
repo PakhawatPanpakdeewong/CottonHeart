@@ -28,6 +28,20 @@ export async function confirmPaymentSuccess(
       [orderId]
     );
 
+    // บันทึกการใช้ส่วนลด: เพิ่ม usedcount สำหรับ discount ที่ variant เข้าร่วม
+    await c.query(
+      `UPDATE discounts d
+       SET usedcount = usedcount + 1
+       WHERE d.variantid IN (
+         SELECT i.variantid
+         FROM order_items oi
+         JOIN inventories i ON oi.inventoryid = i.inventoryid
+         WHERE oi.orderid = $1
+       )
+       AND d.variantid IS NOT NULL`,
+      [orderId]
+    );
+
     if (ownClient) await c.query('COMMIT');
   } catch (err) {
     if (ownClient) await c.query('ROLLBACK');

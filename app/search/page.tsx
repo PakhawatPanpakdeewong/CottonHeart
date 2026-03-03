@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
-import { Filter, X, ChevronLeft, ChevronRight, ChevronUp, ArrowLeft, Search } from 'lucide-react';
+import { Filter, X, ChevronLeft, ChevronRight, ChevronUp, ArrowLeft, Search, GitCompare } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -21,6 +21,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { useCompare } from '@/context/CompareContext';
 
 // Icon Component for category button
 const HeartIcon = () => (
@@ -65,42 +66,65 @@ interface ProductCardProps {
   category: string;
   price: string;
   image: string | null;
+  sku?: string | null;
+  subCategory?: { id: number; nameTH: string; nameEN: string } | null;
+  categoryObj?: { id: number; nameTH: string; nameEN: string } | null;
+  onAddToCompare?: () => void;
+  isInCompare?: boolean;
 }
 
-const ProductCard = ({ id, name, category, price, image }: ProductCardProps) => (
-  <Link
-    href={`/products/${id}`}
-    className="block bg-white rounded-lg shadow-sm border border-gray-100 p-4 flex flex-col hover:border-pink-200 transition-colors"
-  >
-    <div className="w-full h-40 bg-gray-100 rounded-lg flex items-center justify-center mb-3 overflow-hidden">
-      {image ? (
-        <img
-          src={image}
-          alt={name}
-          className="w-full h-full object-cover"
-          onError={(e) => {
-            e.currentTarget.style.display = 'none';
-            const parent = e.currentTarget.parentElement;
-            if (parent) {
-              parent.innerHTML = '<div class="text-gray-400 text-sm">ไม่มีรูปภาพ</div>';
-            }
-          }}
-        />
-      ) : (
-        <div className="text-gray-400 text-sm">ไม่มีรูปภาพ</div>
-      )}
-    </div>
-    <p className="text-xs text-gray-500 mb-1">{category}</p>
-    <h3 className="text-sm font-medium text-gray-900 mb-2 line-clamp-2">{name}</h3>
-    <div className="mt-auto">
-      <p className="text-lg font-bold text-gray-900">{price} บาท</p>
-    </div>
-  </Link>
+const ProductCard = ({ id, name, category, price, image, onAddToCompare, isInCompare }: ProductCardProps) => (
+  <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 flex flex-col hover:border-pink-200 transition-colors relative">
+    <Link href={`/products/${id}`} className="flex flex-col flex-1">
+      <div className="w-full h-40 bg-gray-100 rounded-lg flex items-center justify-center mb-3 overflow-hidden">
+        {image ? (
+          <img
+            src={image}
+            alt={name}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+              const parent = e.currentTarget.parentElement;
+              if (parent) {
+                parent.innerHTML = '<div class="text-gray-400 text-sm">ไม่มีรูปภาพ</div>';
+              }
+            }}
+          />
+        ) : (
+          <div className="text-gray-400 text-sm">ไม่มีรูปภาพ</div>
+        )}
+      </div>
+      <p className="text-xs text-gray-500 mb-1">{category}</p>
+      <h3 className="text-sm font-medium text-gray-900 mb-2 line-clamp-2">{name}</h3>
+      <div className="mt-auto">
+        <p className="text-lg font-bold text-gray-900">{price} บาท</p>
+      </div>
+    </Link>
+    {onAddToCompare && (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          onAddToCompare();
+        }}
+        className={cn(
+          'mt-2 w-full py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-colors',
+          isInCompare
+            ? 'bg-pink-100 text-pink-700 border border-pink-200'
+            : 'border border-gray-300 text-gray-600 hover:bg-pink-50 hover:border-pink-200 hover:text-pink-600'
+        )}
+      >
+        <GitCompare className="h-3.5 w-3.5" />
+        {isInCompare ? 'อยู่ในรายการเปรียบเทียบ' : 'เพิ่มเปรียบเทียบ'}
+      </button>
+    )}
+  </div>
 );
 
 export default function SearchPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { getCompareCount, addToCompare, isInCompare } = useCompare();
 
   // State
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
@@ -373,6 +397,19 @@ export default function SearchPage() {
             </Dialog>
             </div>
           </form>
+          {/* ปุ่มเปรียบเทียบสินค้า */}
+          <Link
+            href="/compare"
+            className="mt-3 flex items-center justify-center gap-2 w-full py-2.5 px-4 border border-pink-500 text-pink-500 rounded-lg hover:bg-pink-50 transition-colors text-sm font-medium"
+          >
+            <GitCompare className="h-4 w-4" />
+            <span>เปรียบเทียบสินค้า</span>
+            {getCompareCount() > 0 && (
+              <span className="min-w-[20px] h-5 px-1.5 bg-pink-500 text-white rounded-full flex items-center justify-center text-xs">
+                {getCompareCount()}
+              </span>
+            )}
+          </Link>
         </div>
 
         {/* Active Filters */}
@@ -476,6 +513,19 @@ export default function SearchPage() {
                   category={product.subCategory?.nameTH || product.category?.nameTH || 'ไม่มีหมวดหมู่'}
                   price={product.price}
                   image={product.image}
+                  onAddToCompare={() =>
+                    addToCompare({
+                      id: product.id,
+                      name: product.name,
+                      nameEN: product.nameEN,
+                      price: product.price,
+                      image: product.image,
+                      sku: product.sku,
+                      subCategory: product.subCategory,
+                      category: product.category,
+                    })
+                  }
+                  isInCompare={isInCompare(product.id)}
                 />
               ))}
             </div>
