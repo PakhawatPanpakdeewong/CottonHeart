@@ -32,11 +32,23 @@ export async function POST(
       return NextResponse.json({ error: 'หมายเลขออเดอร์ไม่ถูกต้อง' }, { status: 400 });
     }
 
-    // ตรวจสอบ ownership และดึง order
+    // ตรวจสอบ ownership และดึง order + reference code + payment deadline
     const orderRes = await pool.query(
-      `SELECT o.orderid FROM orders o
+      `SELECT o.orderid,
+              o.notes AS reference_code,
+              p.payment_deadline_at
+       FROM orders o
        JOIN customers c ON o.customerid = c.customerid
-       WHERE o.orderid = $1 AND c.email = $2 AND c.isactive = true`,
+       LEFT JOIN LATERAL (
+         SELECT payment_deadline_at
+         FROM payments
+         WHERE orderid = o.orderid
+         ORDER BY paymentid DESC
+         LIMIT 1
+       ) p ON TRUE
+       WHERE o.orderid = $1
+         AND c.email = $2
+         AND c.isactive = true`,
       [orderIdNum, email.trim().toLowerCase()]
     );
 
@@ -44,24 +56,40 @@ export async function POST(
       return NextResponse.json({ error: 'ไม่พบคำสั่งซื้อหรือไม่มีสิทธิ์เข้าถึง' }, { status: 404 });
     }
 
-    const referenceCode = generateReferenceCode();
+    const row = orderRes.rows[0] as {
+      reference_code: string | null;
+      payment_deadline_at: string | null;
+    };
 
-    await pool.query(
-      `UPDATE orders SET notes = $1, updateddate = CURRENT_TIMESTAMP WHERE orderid = $2`,
-      [referenceCode, orderIdNum]
-    );
+    let referenceCode = row.reference_code;
 
-    // กำหนดเวลาชำระเงิน 30 นาที - เริ่มจับเวลาตั้งแต่กดดำเนินการต่อ
-    try {
+    // ถ้ายังไม่เคยมีรหัสอ้างอิง ให้สร้างใหม่และบันทึกลง orders.notes
+    if (!referenceCode) {
+      referenceCode = generateReferenceCode();
       await pool.query(
-        `UPDATE payments
-         SET payment_deadline_at = CURRENT_TIMESTAMP + INTERVAL '30 minutes',
+        `UPDATE orders
+         SET notes = $1,
              updateddate = CURRENT_TIMESTAMP
-         WHERE orderid = $1 AND paymentstatus = 'pending'`,
-        [orderIdNum]
+         WHERE orderid = $2`,
+        [referenceCode, orderIdNum]
       );
-    } catch {
-      // payment_deadline_at column อาจยังไม่มี - รัน migration: schemas/add_payment_deadline.sql
+    }
+
+    // ถ้ายังไม่เคยตั้ง payment_deadline_at ให้ตั้งครั้งแรกเท่านั้น
+    if (!row.payment_deadline_at) {
+      try {
+        await pool.query(
+          `UPDATE payments
+           SET payment_deadline_at = CURRENT_TIMESTAMP + INTERVAL '30 minutes',
+               updateddate = CURRENT_TIMESTAMP
+           WHERE orderid = $1
+             AND paymentstatus = 'pending'
+             AND payment_deadline_at IS NULL`,
+          [orderIdNum]
+        );
+      } catch {
+        // payment_deadline_at column อาจยังไม่มี - รัน migration: schemas/add_payment_deadline.sql
+      }
     }
 
     return NextResponse.json({ referenceCode, orderId: orderIdNum.toString() });

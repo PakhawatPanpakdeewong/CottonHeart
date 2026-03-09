@@ -166,6 +166,7 @@ export default function OrderDetailPage() {
   const canCancel = order.orderStatus === 'ordered';
   // แสดงปุ่มซื้ออีกครั้ง เมื่อออเดอร์ถูกยกเลิก หรือจัดส่งสำเร็จแล้ว
   const canBuyAgain = order.orderStatus === 'cancelled' || order.orderStatus === 'delivered';
+  const isPaid = order.paymentStatus === 'paid' || !!order.paymentDate;
 
   const handleBuyAgain = () => {
     if (!order) return;
@@ -209,7 +210,19 @@ export default function OrderDetailPage() {
         {/* Shipping Information */}
         <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4">
           <h2 className="text-base font-semibold text-gray-900 mb-3">ข้อมูลการจัดส่ง</h2>
-          <p className="text-sm text-gray-500 mb-1">ยังไม่สามารถระบุได้</p>
+          <div className="mb-2">
+            <p className="text-xs text-gray-500 mb-0.5">หมายเลขติดตามพัสดุ (Tracking Number)</p>
+            {order.trackingNumber ? (
+              <p className="text-sm font-semibold text-gray-900 font-mono">{order.trackingNumber}</p>
+            ) : (
+              <p className="text-sm text-gray-500">ยังไม่สามารถระบุได้</p>
+            )}
+          </div>
+          {order.shippingCarrier && (
+            <p className="text-sm text-gray-700 mb-2">
+              <span className="text-gray-500">บริษัทขนส่ง:</span> {order.shippingCarrier}
+            </p>
+          )}
           <p className="text-sm text-gray-700 mb-2">
             ที่อยู่ในการจัดส่ง: {order.shippingAddress}
           </p>
@@ -290,10 +303,22 @@ export default function OrderDetailPage() {
             <p className="text-gray-700">
               <span className="text-gray-500">ชำระด้วย:</span> {order.paymentMethod}
             </p>
-            <p className="text-gray-700 font-medium">
-              <span className="text-gray-500">ยอดการชำระรวม:</span>{' '}
-              ฿ {(order.paymentAmount ?? order.totalAmount).toFixed(2)}
-            </p>
+
+            {/* Total Payment Highlight */}
+            <div className="mt-3 p-3 rounded-lg bg-pink-50 border border-pink-200 flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-xs font-medium text-pink-700 uppercase tracking-wide">
+                  {isPaid ? 'ชำระแล้ว' : 'ยอดที่ต้องชำระ'}
+                </span>
+                <span className="text-[11px] text-gray-500">
+                  รวมค่าสินค้าและค่าจัดส่งทั้งหมด
+                </span>
+              </div>
+              <span className="text-xl font-bold text-pink-500 tracking-tight ml-4">
+                ฿ {(order.paymentAmount ?? order.totalAmount).toFixed(2)}
+              </span>
+            </div>
+
             {order.paymentDate && (
               <p className="text-gray-700">
                 <span className="text-gray-500">วันที่ยืนยันการชำระ:</span>{' '}
@@ -314,8 +339,7 @@ export default function OrderDetailPage() {
             type="button"
             className="w-full py-3 px-4 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
             onClick={() => {
-              // TODO: Implement cancel order API
-              alert('ฟังก์ชันยกเลิกการสั่งซื้อกำลังพัฒนา');
+              router.push(`/orders/${order.orderId}/cancel`);
             }}
           >
             ยกเลิกการสั่งซื้อ

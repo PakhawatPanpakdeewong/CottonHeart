@@ -99,22 +99,23 @@ export async function GET(request: NextRequest) {
           ? 'delivered'
           : mapOrderStatus(row.orderstatus);
       return {
-      id: row.orderitemid.toString(),
-      orderId: row.orderid.toString(),
-      productId: row.productid.toString(),
-      productName: row.productnameth || row.productnameen || '',
-      category: row.categorynameth || '',
-      image: getProductImageUrl(row.sku),
-      variant: row.sku,
-      variantId: row.variantid?.toString(),
-      quantity: row.quantityordered,
-      price: parseFloat(row.totalprice) || parseFloat(row.unitprice) * row.quantityordered,
-      status: effectiveStatus,
-      totalAmount: parseFloat(row.totalamount) || 0,
-      paymentAmount: row.paymentamount ? parseFloat(row.paymentamount) : null,
-      paymentStatus: row.paymentstatus || null,
-      paymentDeadlineAt: row.payment_deadline_at || null,
-    };
+        id: row.orderitemid.toString(),
+        orderId: row.orderid.toString(),
+        orderDate: row.orderdate,
+        productId: row.productid.toString(),
+        productName: row.productnameth || row.productnameen || '',
+        category: row.categorynameth || '',
+        image: getProductImageUrl(row.sku),
+        variant: row.sku,
+        variantId: row.variantid?.toString(),
+        quantity: row.quantityordered,
+        price: parseFloat(row.totalprice) || parseFloat(row.unitprice) * row.quantityordered,
+        status: effectiveStatus,
+        totalAmount: parseFloat(row.totalamount) || 0,
+        paymentAmount: row.paymentamount ? parseFloat(row.paymentamount) : null,
+        paymentStatus: row.paymentstatus || null,
+        paymentDeadlineAt: row.payment_deadline_at || null,
+      };
     });
 
     return NextResponse.json({ orders });

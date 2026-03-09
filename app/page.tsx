@@ -6,7 +6,17 @@ import { useAuth } from '@/context/AuthContext';
 import { useFavorites } from '@/context/FavoritesContext';
 import Link from 'next/link';
 import Header from '@/components/Header';
-import { Heart, Baby, Package, UtensilsCrossed, LayoutGrid, Sparkles, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
+import {
+  Heart,
+  Baby,
+  Package,
+  UtensilsCrossed,
+  LayoutGrid,
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+} from 'lucide-react';
 
 // Product Card Component
 interface ProductCardProps {
@@ -99,7 +109,7 @@ interface Category {
   id: number;
   nameTH: string;
   nameEN: string;
-  subCategories: Array<{ id: number; nameTH: string; nameEN: string }>;
+  subCategories: Array<{ id: number; nameTH: string; nameEN: string; productCount?: number }>;
 }
 
 const CATEGORY_STYLES = [
@@ -111,10 +121,53 @@ const CATEGORY_STYLES = [
   { bg: 'bg-slate-50', hover: 'hover:bg-slate-100', icon: 'text-slate-600', Icon: LayoutGrid },
 ];
 
+const getCategoryStyle = (category: Category, index: number) => {
+  const name = category.nameTH || '';
+
+  // อุปกรณ์ป้อนอาหาร -> โทนสีเทา
+  if (name.includes('อุปกรณ์ป้อนอาหาร')) {
+    return { bg: 'bg-gray-50', hover: 'hover:bg-gray-100', icon: 'text-gray-600', Icon: UtensilsCrossed };
+  }
+
+  // การให้นม / ปั๊มนม
+  if (name.includes('ให้นม') || name.includes('ปั๊มนม')) {
+    return { bg: 'bg-pink-50', hover: 'hover:bg-pink-100', icon: 'text-pink-600', Icon: Baby };
+  }
+
+  // ของเล่น / เสริมพัฒนาการ
+  if (name.includes('ของเล่น') || name.includes('พัฒนาการ')) {
+    return { bg: 'bg-green-50', hover: 'hover:bg-green-100', icon: 'text-green-600', Icon: LayoutGrid };
+  }
+
+  // ผ้าอ้อม / ผลิตภัณฑ์สำหรับผ้าอ้อม
+  if (name.includes('ผ้าอ้อม')) {
+    return { bg: 'bg-purple-50', hover: 'hover:bg-purple-100', icon: 'text-purple-600', Icon: Package };
+  }
+
+  // ทำความสะอาด / ดูแลความสะอาด
+  if (name.includes('ทำความสะอาด') || name.includes('สะอาด')) {
+    return { bg: 'bg-indigo-50', hover: 'hover:bg-indigo-100', icon: 'text-indigo-600', Icon: Sparkles };
+  }
+
+  // อาหาร / อาหารเสริม / ป้อนอาหาร
+  if (name.includes('อาหาร') || name.includes('ป้อน')) {
+    return { bg: 'bg-amber-50', hover: 'hover:bg-amber-100', icon: 'text-amber-700', Icon: UtensilsCrossed };
+  }
+
+  // หมวดดูแลทั่วไป/อื่น ๆ
+  if (name.includes('ดูแล') || name.includes('อุปกรณ์')) {
+    return { bg: 'bg-pink-50', hover: 'hover:bg-pink-100', icon: 'text-pink-600', Icon: Heart };
+  }
+
+  // Fallback: ใช้ลำดับเดิมหมุนตาม index
+  return CATEGORY_STYLES[index % CATEGORY_STYLES.length];
+};
+
 export default function Home() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([]);
   const [newProducts, setNewProducts] = useState<Product[]>([]);
+  const [generalProducts, setGeneralProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [previouslyOrderedProducts, setPreviouslyOrderedProducts] = useState<
     { id: string; name: string; price: number; image: string | null; category: string }[]
@@ -122,6 +175,7 @@ export default function Home() {
   const [loadingRecommended, setLoadingRecommended] = useState(true);
   const [loadingNew, setLoadingNew] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  const [loadingGeneral, setLoadingGeneral] = useState(true);
   const [loadingOrdered, setLoadingOrdered] = useState(false);
   const [discountedProducts, setDiscountedProducts] = useState<
     { id: string; name: string; price: string; originalPrice: string; image: string | null; category: string | null; discountLabel: string }[]
@@ -129,6 +183,7 @@ export default function Home() {
   const [loadingDiscounted, setLoadingDiscounted] = useState(true);
   const [errorRecommended, setErrorRecommended] = useState<string | null>(null);
   const [errorNew, setErrorNew] = useState<string | null>(null);
+  const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
   const { getTotalItems } = useCart();
   const { isAuthenticated, user } = useAuth();
   const { favorites } = useFavorites();
@@ -195,6 +250,71 @@ export default function Home() {
     fetchDiscountedProducts();
   }, []);
 
+  // Fetch general products (random 10 products)
+  useEffect(() => {
+    const fetchGeneralProducts = async () => {
+      try {
+        setLoadingGeneral(true);
+        const response = await fetch('/api/products');
+        if (!response.ok) {
+          throw new Error('Failed to fetch products');
+        }
+        const data = await response.json();
+        const products: Product[] = data.products || [];
+
+        // กระจายประเภทสินค้าให้หลากหลายขึ้น
+        const productsByCategory = new Map<string, Product[]>();
+        products.forEach((p) => {
+          const key = p.category || 'อื่นๆ';
+          if (!productsByCategory.has(key)) {
+            productsByCategory.set(key, []);
+          }
+          productsByCategory.get(key)!.push(p);
+        });
+
+        // สุ่มลำดับประเภทก่อน
+        const categoryKeys = Array.from(productsByCategory.keys()).sort(
+          () => Math.random() - 0.5
+        );
+
+        const picked: Product[] = [];
+
+        // วนเก็บสินค้าทีละชิ้นจากแต่ละประเภทแบบ round-robin
+        let index = 0;
+        while (picked.length < 10 && categoryKeys.length > 0) {
+          const categoryIndex = index % categoryKeys.length;
+          const categoryKey = categoryKeys[categoryIndex];
+          const list = productsByCategory.get(categoryKey);
+
+          if (!list || list.length === 0) {
+            categoryKeys.splice(categoryIndex, 1);
+            continue;
+          }
+
+          // สุ่มเลือกสินค้า 1 ชิ้นจากประเภทนั้น
+          const randomIdx = Math.floor(Math.random() * list.length);
+          const [product] = list.splice(randomIdx, 1);
+          picked.push(product);
+
+          if (list.length === 0) {
+            categoryKeys.splice(categoryIndex, 1);
+          } else {
+            index++;
+          }
+        }
+
+        setGeneralProducts(picked);
+      } catch (err) {
+        console.error('Error fetching general products:', err);
+        setErrorGeneral(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดสินค้าทั่วไป');
+      } finally {
+        setLoadingGeneral(false);
+      }
+    };
+
+    fetchGeneralProducts();
+  }, []);
+
   // Fetch categories from database
   useEffect(() => {
     const fetchCategories = async () => {
@@ -205,7 +325,19 @@ export default function Home() {
           throw new Error('Failed to fetch categories');
         }
         const data = await response.json();
-        setCategories(data.categories || []);
+        const rawCategories: Category[] = data.categories || [];
+
+        // Keep only categories that have at least one sub-category with products
+        const filteredCategories = rawCategories
+          .map((category) => ({
+            ...category,
+            subCategories: (category.subCategories || []).filter(
+              (subCategory) => (subCategory.productCount || 0) > 0
+            ),
+          }))
+          .filter((category) => category.subCategories.length > 0);
+
+        setCategories(filteredCategories);
       } catch (err) {
         console.error('Error fetching categories:', err);
       } finally {
@@ -418,7 +550,7 @@ export default function Home() {
           ) : categories.length > 0 ? (
             <div className="grid grid-cols-2 gap-3">
               {categories.slice(0, 6).map((category, index) => {
-                const style = CATEGORY_STYLES[index % CATEGORY_STYLES.length];
+                const style = getCategoryStyle(category, index);
                 const IconComponent = style.Icon;
                 return (
                   <Link
@@ -443,21 +575,49 @@ export default function Home() {
           )}
         </section>
 
-        {/* New Products */}
+        {/* New Products - แสดงเฉพาะเมื่อมีสินค้าใหม่หรือกำลังโหลด */}
+        {(loadingNew || (!errorNew && newProducts.length > 0)) && (
+          <section>
+            <SectionHeader title="สินค้าใหม่" linkText="ดูเพิ่มเติม" linkHref="/search?sort=new" />
+            {loadingNew ? (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-100 rounded-lg h-64 animate-pulse"></div>
+                <div className="bg-gray-100 rounded-lg h-64 animate-pulse"></div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {newProducts.slice(0, 6).map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    id={product.id}
+                    name={product.name}
+                    price={product.price}
+                    image={product.image}
+                    category={product.category}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+        
+        {/* General Products - สินค้าทั่วไป (สุ่ม 10 อย่าง) */}
         <section>
-          <SectionHeader title="สินค้าใหม่" linkText="ดูเพิ่มเติม" linkHref="/search?sort=new" />
-          {loadingNew ? (
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">สินค้าทั่วไป</h2>
+          </div>
+          {loadingGeneral ? (
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-gray-100 rounded-lg h-64 animate-pulse"></div>
               <div className="bg-gray-100 rounded-lg h-64 animate-pulse"></div>
             </div>
-          ) : errorNew ? (
+          ) : errorGeneral ? (
             <div className="text-center py-8 text-gray-500">
-              <p>{errorNew}</p>
+              <p>{errorGeneral}</p>
             </div>
-          ) : newProducts.length > 0 ? (
+          ) : generalProducts.length > 0 ? (
             <div className="grid grid-cols-2 gap-4">
-              {newProducts.slice(0, 6).map((product) => (
+              {generalProducts.slice(0, 10).map((product) => (
                 <ProductCard
                   key={product.id}
                   id={product.id}
@@ -470,7 +630,7 @@ export default function Home() {
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
-              <p>ไม่มีสินค้าใหม่ในเดือนนี้</p>
+              <p>ไม่มีสินค้าทั่วไปที่สามารถแสดงได้</p>
             </div>
           )}
         </section>

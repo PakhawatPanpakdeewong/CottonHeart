@@ -97,10 +97,12 @@ export async function GET(request: NextRequest) {
     query += ` ORDER BY p.productid, pv.price ASC NULLS LAST`;
 
     // Get total count for pagination (before adding sort wrapper)
-    const countQuery = query.replace(
-      /SELECT DISTINCT ON \(p\.productid\).*?FROM/s,
-      'SELECT COUNT(DISTINCT p.productid) FROM'
-    ).replace(/ORDER BY.*$/, '');
+    const countQuery = query
+      .replace(
+        /SELECT DISTINCT ON \(p\.productid\)[\s\S]*?FROM/,
+        'SELECT COUNT(DISTINCT p.productid) FROM'
+      )
+      .replace(/ORDER BY.*$/, '');
 
     const countResult = await pool.query(countQuery, queryParams);
     const totalCount = parseInt(countResult.rows[0].count, 10);

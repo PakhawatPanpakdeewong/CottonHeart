@@ -42,6 +42,15 @@ function deduplicateAddresses<T extends { addressLine1?: string; subDistrict?: s
   });
 }
 
+interface AddressApiItem {
+  id: number;
+  addressLine1?: string;
+  subDistrict?: string;
+  postalCode?: string;
+  province?: string;
+  isDefault?: boolean;
+}
+
 // แปลงเป็นรูปแบบ พ.ศ. (พุทธศักราช)
 function formatBuddhistDate(date: Date): string {
   const buddhistYear = date.getFullYear() + 543;
@@ -114,11 +123,21 @@ export default function DeliveryPage() {
 
           const addressRes = await fetch(`/api/users/address?email=${encodeURIComponent(email)}`);
           if (addressRes.ok) {
-            const { addresses: addrs } = await addressRes.json();
+            const { addresses: addrs } = (await addressRes.json()) as {
+              addresses: AddressApiItem[];
+            };
             if (addrs?.length > 0) {
-              const uniqueAddrs = deduplicateAddresses(addrs);
+              const uniqueAddrsRaw = deduplicateAddresses<AddressApiItem>(addrs);
+              const uniqueAddrs = uniqueAddrsRaw.map((a) => ({
+                id: a.id,
+                addressLine1: a.addressLine1 || '',
+                subDistrict: a.subDistrict || '',
+                postalCode: a.postalCode || '',
+                province: a.province || '',
+                isDefault: a.isDefault ?? false,
+              }));
               setAddresses(uniqueAddrs);
-              const defaultAddr = uniqueAddrs.find((a: { isDefault: boolean }) => a.isDefault) || uniqueAddrs[0];
+              const defaultAddr = uniqueAddrs.find((a) => a.isDefault) || uniqueAddrs[0];
               setSelectedAddressId(defaultAddr.id);
               setUseNewAddress(false);
               setAddressLine1(defaultAddr.addressLine1 || '');

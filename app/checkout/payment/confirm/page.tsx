@@ -10,6 +10,7 @@ import { CheckCircle, MessageCircle, ExternalLink, ChevronUp, Check } from 'luci
 const SHIPPING_COST = 50;
 
 // รูป Set B - ขั้นตอนการยืนยันการโอนใน Line Chat
+import B2Img from '@/components/Pic/B2.png';
 import B3Img from '@/components/Pic/B3.png';
 import B4Img from '@/components/Pic/B4.png';
 import B5Img from '@/components/Pic/B5.png';
@@ -102,6 +103,17 @@ export default function PaymentConfirmPage() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [order?.paymentDeadlineAt]);
+
+  // เตือนเมื่อผู้ใช้พยายามปิดแท็บ / รีเฟรช / ใช้ปุ่มย้อนกลับของเบราว์เซอร์
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   if (isLoading || !isAuthenticated) {
     return (
@@ -291,6 +303,9 @@ export default function PaymentConfirmPage() {
             <div>
               <p className="text-sm font-medium text-gray-800 mb-2">ขั้นตอนที่ 1-2</p>
               <p className="text-sm text-gray-600 mb-2">เข้าไปที่หน้าแชทของร้าน คลิกเมนู และกดเพิ่มหลักฐานการชำระเงิน</p>
+              <div className="rounded-lg overflow-hidden border border-gray-200">
+                <img src={B2Img.src} alt="ขั้นตอน 1-2 - เลือกเมนูเพิ่มหลักฐานการชำระเงิน" className="w-full h-auto" />
+              </div>
             </div>
 
             <div>

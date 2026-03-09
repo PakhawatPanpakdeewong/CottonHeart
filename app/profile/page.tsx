@@ -15,6 +15,7 @@ import {
   LogOut,
   CreditCard,
   ChevronUp,
+  ExternalLink,
 } from 'lucide-react';
 
 // Order status types
@@ -23,6 +24,7 @@ type OrderStatus = 'ordered' | 'confirmed' | 'shipping' | 'delivered' | 'cancell
 interface OrderItem {
   id: string;
   orderId?: string;
+  orderDate?: string;
   productId: string;
   productName: string;
   category: string;
@@ -54,6 +56,10 @@ const STATUS_STYLES: Record<OrderStatus, string> = {
   cancelled: 'border-red-500 text-red-500 bg-red-50',
 };
 
+// Contact URLs - ใช้ชุดเดียวกับหน้า confirm payment
+const LINE_URL = 'https://line.me/R/ti/p/@040gdsbn';
+const MESSENGER_URL = 'https://www.facebook.com/people/KiddyCare/61577838044872/';
+
 // Mask phone for privacy
 function maskPhone(phone: string): string {
   if (!phone || phone.length < 4) return 'XXX-XXX-XXXX';
@@ -79,6 +85,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const [orderFilter, setOrderFilter] = useState<'all' | 'pending_payment' | OrderStatus>('all');
+  const [orderSort, setOrderSort] = useState<'desc' | 'asc'>('desc');
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [profileData, setProfileData] = useState<{
@@ -89,6 +96,21 @@ export default function ProfilePage() {
     profileImage: string | null;
   } | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showContactOptions, setShowContactOptions] = useState(false);
+  const [isClosingContact, setIsClosingContact] = useState(false);
+
+  const openContactOptions = () => {
+    setIsClosingContact(false);
+    setShowContactOptions(true);
+  };
+
+  const closeContactOptions = () => {
+    setIsClosingContact(true);
+    setTimeout(() => {
+      setShowContactOptions(false);
+      setIsClosingContact(false);
+    }, 250);
+  };
 
   // Show scroll-to-top button when scrolled down
   useEffect(() => {
@@ -183,7 +205,11 @@ export default function ProfilePage() {
     acc[oid].push(item);
     return acc;
   }, {});
-  const orderGroups = Object.entries(ordersByOrderId);
+  const orderGroups = Object.entries(ordersByOrderId).sort((a, b) => {
+    const aDate = a[1][0]?.orderDate ? new Date(a[1][0].orderDate).getTime() : 0;
+    const bDate = b[1][0]?.orderDate ? new Date(b[1][0].orderDate).getTime() : 0;
+    return orderSort === 'desc' ? bDate - aDate : aDate - bDate;
+  });
 
   const orderTabs = [
     { key: 'all' as const, label: 'รายการทั้งหมด' },
@@ -266,15 +292,14 @@ export default function ProfilePage() {
             <FileText className="w-4 h-4" />
             ข้อมูลส่วนตัวเพิ่มเติม
           </Link>
-          <a
-            href={process.env.NEXT_PUBLIC_LINE_URL || 'https://line.me'}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={openContactOptions}
             className="flex items-center justify-center gap-2 py-3 px-4 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
           >
             <MessageCircle className="w-4 h-4" />
             ติดต่อกับร้านค้า
-          </a>
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -295,20 +320,35 @@ export default function ProfilePage() {
           </h2>
 
           {/* Order Status Tabs */}
-          <div className="flex gap-4 border-b border-gray-200 mb-4 overflow-x-auto">
-            {orderTabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setOrderFilter(tab.key)}
-                className={`pb-3 text-sm font-medium whitespace-nowrap transition-colors ${
-                  orderFilter === tab.key
-                    ? 'text-pink-500 border-b-2 border-pink-500'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="border-b border-gray-200 mb-2">
+            <div className="flex gap-4 overflow-x-auto">
+              {orderTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setOrderFilter(tab.key)}
+                  className={`pb-3 text-sm font-medium whitespace-nowrap transition-colors ${
+                    orderFilter === tab.key
+                      ? 'text-pink-500 border-b-2 border-pink-500'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Sort Filter */}
+          <div className="flex items-center justify-start gap-2 mb-4">
+            <span className="text-xs text-gray-500 whitespace-nowrap">เรียงตาม</span>
+            <select
+              value={orderSort}
+              onChange={(e) => setOrderSort(e.target.value as 'desc' | 'asc')}
+              className="text-xs border border-gray-300 rounded-md px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-pink-500"
+            >
+              <option value="desc">ใหม่ → เก่า</option>
+              <option value="asc">เก่า → ใหม่</option>
+            </select>
           </div>
 
           {/* Order List */}
@@ -454,6 +494,61 @@ export default function ProfilePage() {
           </Link>
         </div>
       </main>
+
+      {/* Contact Options Bottom Sheet */}
+      {showContactOptions && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/30">
+          <button
+            type="button"
+            className="absolute inset-0 w-full h-full"
+            onClick={closeContactOptions}
+            aria-label="ปิดเมนูติดต่อ"
+          />
+          <div
+            className={`relative w-full max-w-md mx-auto bg-white rounded-t-2xl shadow-lg p-5 transform transition-transform duration-250 ease-out ${
+              isClosingContact ? 'translate-y-full' : 'translate-y-0'
+            }`}
+          >
+            <div className="w-12 h-1 rounded-full bg-gray-300 mx-auto mb-4" />
+            <h2 className="text-base font-semibold text-gray-900 mb-3 text-center">
+              เลือกช่องทางการติดต่อ
+            </h2>
+            <div className="space-y-3">
+              <a
+                href={LINE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between w-full py-3 px-4 border-2 border-green-500 rounded-lg text-sm font-medium text-green-600 hover:bg-green-50 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <MessageCircle className="w-4 h-4" />
+                  Line Chat
+                </span>
+                <ExternalLink className="w-4 h-4" />
+              </a>
+              <a
+                href={MESSENGER_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between w-full py-3 px-4 border-2 border-blue-400 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <MessageCircle className="w-4 h-4" />
+                  Facebook Messenger
+                </span>
+                <ExternalLink className="w-4 h-4" />
+              </a>
+              <button
+                type="button"
+                onClick={closeContactOptions}
+                className="w-full mt-1 py-2.5 text-sm font-medium text-gray-600 rounded-lg hover:bg-gray-50 border border-gray-200"
+              >
+                ยกเลิก
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

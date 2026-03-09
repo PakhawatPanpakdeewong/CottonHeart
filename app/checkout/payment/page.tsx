@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import Header from '@/components/Header';
 import { CreditCard, Smartphone, FileCheck } from 'lucide-react';
+import KPlusQrImage from '@/components/Pic/S__11124767.jpg';
 
 const SHIPPING_COST = 50;
 
@@ -31,19 +32,12 @@ interface OrderDetail {
 
 // ข้อมูลบัญชีธนาคาร (ตัวอย่าง - แก้ไขตามข้อมูลจริง)
 const BANK_ACCOUNTS = {
-  krungthai: {
-    name: 'ธนาคารกรุงไทย',
-    logo: '🏦',
-    accountNumber: 'xxx-x-xxxxx-x',
-    accountNameTh: 'นายภควัฒณ์ พันธุ์ภักดีวงษ์',
-    accountNameEn: 'Mr.Pakawat Punpakdeewong',
-  },
   kasikorn: {
     name: 'ธนาคารกสิกรไทย',
     logo: '🏦',
-    accountNumber: 'xxx-x-x0660-x',
-    accountNameTh: 'นายภควัฒณ์ พันธุ์ภักดีวงษ์',
-    accountNameEn: 'Mr.Pakawat Punpakdeewong',
+    accountNumber: 'xxx-x-x4450-x',
+    accountNameTh: 'น.ส. ปณาลี จุกสีดา',
+    accountNameEn: 'Ms.Panalee Juksida',
   },
 };
 
@@ -105,6 +99,37 @@ export default function PaymentPage() {
   }, [isAuthenticated, user, orderId, email]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [pendingLeaveHref, setPendingLeaveHref] = useState<string | null>(null);
+
+  // เตือนเมื่อผู้ใช้พยายามปิดแท็บ / รีเฟรช / ใช้ปุ่มย้อนกลับของเบราว์เซอร์
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // ถ้ากำลังยกเลิกหรือ submit อยู่แล้ว ไม่ต้องเตือนซ้ำ
+      if (isSubmitting || isCancelling) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isSubmitting, isCancelling]);
+
+  const requestLeavePage = (href: string) => {
+    if (isSubmitting || isCancelling) return;
+    setPendingLeaveHref(href);
+  };
+
+  const confirmLeavePage = () => {
+    if (!pendingLeaveHref) return;
+    const target = pendingLeaveHref;
+    setPendingLeaveHref(null);
+    router.push(target);
+  };
+
+  const cancelLeaveRequest = () => {
+    setPendingLeaveHref(null);
+  };
 
   const handleContinue = async () => {
     if (!orderId || !email) return;
@@ -125,9 +150,10 @@ export default function PaymentPage() {
     }
   };
 
-  // QR code URL - ใช้ orderId เป็น reference
-  const qrReferenceId = orderId ? `${orderId.padStart(15, '0')}` : '004999105173487';
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrReferenceId)}`;
+  // ปุ่มย้อนกลับ (ยกเลิกคำสั่งซื้อ) ถูกตัดออกตามความต้องการของผู้ใช้
+
+  // เลขที่อ้างอิง (reference id) สำหรับแสดงในหน้าจอเท่านั้น
+  const qrReferenceId = orderId ? `${orderId.padStart(15, '0')}` : '004999058470542';
 
   if (isLoading || !isAuthenticated) {
     return (
@@ -195,7 +221,13 @@ export default function PaymentPage() {
       <div className="max-w-md mx-auto px-4 pt-8 pb-4">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">ข้อมูลการชำระเงิน</h1>
         <div className="text-sm text-gray-500 mb-4">
-          <Link href="/" className="hover:text-gray-700">ร้านค้า</Link>
+          <button
+            type="button"
+            onClick={() => requestLeavePage('/')}
+            className="hover:text-gray-700 text-gray-500"
+          >
+            ร้านค้า
+          </button>
           <span className="mx-2">/</span>
           <span>วิธีการชำระเงิน</span>
         </div>
@@ -243,14 +275,6 @@ export default function PaymentPage() {
           </p>
           <p className="text-xs text-gray-500 mb-4">โอนผ่านเพียงแค่ 1 ช่องทางเท่านั้น</p>
 
-          {/* Krungthai Bank */}
-          <div className="border border-gray-200 rounded-lg p-3 mb-4">
-            <p className="text-sm font-medium text-gray-700 mb-1">{BANK_ACCOUNTS.krungthai.name}</p>
-            <p className="text-sm text-gray-900">เลขบัญชี: {BANK_ACCOUNTS.krungthai.accountNumber}</p>
-            <p className="text-sm text-gray-900">{BANK_ACCOUNTS.krungthai.accountNameTh}</p>
-            <p className="text-xs text-gray-500">{BANK_ACCOUNTS.krungthai.accountNameEn}</p>
-          </div>
-
           {/* Kasikornbank + QR */}
           <div className="border border-gray-200 rounded-lg p-3 mb-4 overflow-hidden">
             <p className="text-sm font-medium text-gray-700 mb-2">{BANK_ACCOUNTS.kasikorn.name}</p>
@@ -259,16 +283,15 @@ export default function PaymentPage() {
               <p className="text-white/80 text-xs">Prompt Pay</p>
               <div className="flex items-center justify-center py-3">
                 <img
-                  src={qrImageUrl}
-                  alt="QR Code สำหรับชำระเงิน"
-                  className="w-36 h-36 bg-white rounded p-1"
+                  src={KPlusQrImage.src}
+                  alt="QR Code สำหรับชำระเงิน (K+ PromptPay)"
+                  className="w-64 max-w-full h-auto bg-white rounded"
                 />
               </div>
             </div>
             <p className="text-xs text-gray-600 mb-1">สแกน QR เพื่อโอนเข้าบัญชี</p>
-            <p className="text-xs text-gray-700">ชื่อ: {BANK_ACCOUNTS.kasikorn.accountNameTh}</p>
-            <p className="text-xs text-gray-700">บัญชี: {BANK_ACCOUNTS.kasikorn.accountNumber}</p>
-            <p className="text-xs text-gray-700">เลขที่อ้างอิง: {qrReferenceId}</p>
+            <p className="text-sm text-gray-700">ชื่อ: {BANK_ACCOUNTS.kasikorn.accountNameTh}</p>
+            <p className="text-sm text-gray-700">บัญชี: {BANK_ACCOUNTS.kasikorn.accountNumber}</p>
             <p className="text-xs text-gray-500 mt-2">K+ Accepts all banks | รับเงินได้จากทุกธนาคาร</p>
           </div>
 
@@ -278,15 +301,17 @@ export default function PaymentPage() {
           </div>
         </div>
 
-        {/* Continue Button */}
-        <button
-          type="button"
-          onClick={handleContinue}
-          disabled={isSubmitting}
-          className="w-full py-3.5 bg-pink-500 text-white rounded-lg font-semibold hover:bg-pink-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
-        >
-          {isSubmitting ? 'กำลังสร้างรหัสอ้างอิง...' : 'ดำเนินการต่อ'}
-        </button>
+        {/* Action Buttons */}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleContinue}
+            disabled={isSubmitting || isCancelling}
+            className="w-full py-3.5 bg-pink-500 text-white rounded-lg font-semibold hover:bg-pink-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed text-sm"
+          >
+            {isSubmitting ? 'กำลังสร้างรหัสอ้างอิง...' : 'ดำเนินการต่อ'}
+          </button>
+        </div>
 
         {/* Next Step Preview */}
         <div className="mt-6 space-y-4">
@@ -301,6 +326,36 @@ export default function PaymentPage() {
             </div>
           </div>
         </div>
+
+        {/* Leave-page confirmation banner */}
+        {pendingLeaveHref && (
+          <div className="fixed inset-x-0 bottom-0 z-30 bg-white border-t border-amber-300 shadow-lg">
+            <div className="max-w-md mx-auto px-4 py-3 space-y-2">
+              <p className="text-sm font-medium text-amber-800">
+                การสั่งซื้อยังดำเนินการไม่เสร็จสิ้น คุณต้องการยกเลิกขั้นตอนการชำระเงินนี้หรือไม่?
+              </p>
+              <p className="text-xs text-amber-700">
+                ถ้ากดยืนยัน ระบบจะไม่สร้างรหัสยืนยันการชำระเงินให้กับออร์เดอร์นี้
+              </p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={cancelLeaveRequest}
+                  className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  อยู่ในหน้านี้ต่อ
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmLeavePage}
+                  className="flex-1 py-2.5 bg-red-500 text-white rounded-lg text-sm font-semibold hover:bg-red-600"
+                >
+                  ยกเลิกการสั่งซื้อและออกจากหน้า
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

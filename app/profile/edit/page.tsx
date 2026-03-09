@@ -510,7 +510,7 @@ function AddressForm({
   onChange: (a: AddressItem) => void;
   onSave: (a: AddressItem) => void;
   onCancel: () => void;
-  provinces: string[];
+  provinces: readonly string[];
   saving: boolean;
   isNew?: boolean;
 }) {
