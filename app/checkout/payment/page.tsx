@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import Header from '@/components/Header';
 import { CreditCard, Smartphone, FileCheck } from 'lucide-react';
-import KPlusQrImage from '@/components/Pic/S__11124767.jpg';
+
+// เดิมเคย import รูปจาก '@/components/Pic/S__11124767.jpg' แต่ไฟล์รูปไม่อยู่ในโปรเจกต์แล้ว
+// เลยเปลี่ยนมาใช้ path ไปยังโฟลเดอร์ public แทน
+const KPlusQrImage = '/images/S__11124767.jpg';
 
 const SHIPPING_COST = 50;
 
@@ -41,7 +44,7 @@ const BANK_ACCOUNTS = {
   },
 };
 
-export default function PaymentPage() {
+function PaymentPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orderId = searchParams.get('orderId');
@@ -283,7 +286,7 @@ export default function PaymentPage() {
               <p className="text-white/80 text-xs">Prompt Pay</p>
               <div className="flex items-center justify-center py-3">
                 <img
-                  src={KPlusQrImage.src}
+                  src={KPlusQrImage}
                   alt="QR Code สำหรับชำระเงิน (K+ PromptPay)"
                   className="w-64 max-w-full h-auto bg-white rounded"
                 />
@@ -358,5 +361,19 @@ export default function PaymentPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function PaymentPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#fcfafc] flex items-center justify-center">
+          <div className="text-gray-500">กำลังโหลด...</div>
+        </div>
+      }
+    >
+      <PaymentPageInner />
+    </Suspense>
   );
 }

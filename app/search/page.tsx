@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
@@ -121,7 +121,7 @@ const ProductCard = ({ id, name, category, price, image, onAddToCompare, isInCom
   </div>
 );
 
-export default function SearchPage() {
+function SearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { getCompareCount, addToCompare, isInCompare } = useCompare();
@@ -581,5 +581,30 @@ export default function SearchPage() {
         </button>
       )}
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#fcfafc] pb-8">
+          <Header />
+          <main className="max-w-md mx-auto px-4 py-4 bg-white">
+            <div className="mb-4">
+              <div className="h-4 w-32 bg-gray-200 rounded mb-3" />
+              <div className="h-10 bg-gray-200 rounded mb-2" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="bg-gray-100 rounded-lg h-64 animate-pulse" />
+              ))}
+            </div>
+          </main>
+        </div>
+      }
+    >
+      <SearchPageInner />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -10,10 +10,12 @@ import { CheckCircle, MessageCircle, ExternalLink, ChevronUp, Check } from 'luci
 const SHIPPING_COST = 50;
 
 // รูป Set B - ขั้นตอนการยืนยันการโอนใน Line Chat
-import B2Img from '@/components/Pic/B2.png';
-import B3Img from '@/components/Pic/B3.png';
-import B4Img from '@/components/Pic/B4.png';
-import B5Img from '@/components/Pic/B5.png';
+// ใช้ไฟล์รูปที่วางไว้ในโฟลเดอร์ public root
+// เช่น public/B2.png จะเข้าถึงได้ผ่าน path '/B2.png'
+const B2Img = '/B2.png';
+const B3Img = '/B3.png';
+const B4Img = '/B4.png';
+const B5Img = '/B5.png';
 
 interface OrderDetail {
   orderId: string;
@@ -27,7 +29,7 @@ interface OrderDetail {
 const LINE_URL = 'https://line.me/R/ti/p/@040gdsbn';
 const MESSENGER_URL = 'https://www.facebook.com/people/KiddyCare/61577838044872/';
 
-export default function PaymentConfirmPage() {
+function PaymentConfirmPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orderId = searchParams.get('orderId');
@@ -304,7 +306,7 @@ export default function PaymentConfirmPage() {
               <p className="text-sm font-medium text-gray-800 mb-2">ขั้นตอนที่ 1-2</p>
               <p className="text-sm text-gray-600 mb-2">เข้าไปที่หน้าแชทของร้าน คลิกเมนู และกดเพิ่มหลักฐานการชำระเงิน</p>
               <div className="rounded-lg overflow-hidden border border-gray-200">
-                <img src={B2Img.src} alt="ขั้นตอน 1-2 - เลือกเมนูเพิ่มหลักฐานการชำระเงิน" className="w-full h-auto" />
+                <img src={B2Img} alt="ขั้นตอน 1-2 - เลือกเมนูเพิ่มหลักฐานการชำระเงิน" className="w-full h-auto" />
               </div>
             </div>
 
@@ -312,7 +314,7 @@ export default function PaymentConfirmPage() {
               <p className="text-sm font-medium text-gray-800 mb-2">ขั้นตอนที่ 3</p>
               <p className="text-sm text-gray-600 mb-2">ส่งเลขยืนยันการโอนชำระ (รหัส 6 หลักด้านบน) ในช่องแชท</p>
               <div className="rounded-lg overflow-hidden border border-gray-200">
-                <img src={B3Img.src} alt="ขั้นตอน 3 - ส่งเลขยืนยันการโอน" className="w-full h-auto" />
+                <img src={B3Img} alt="ขั้นตอน 3 - ส่งเลขยืนยันการโอน" className="w-full h-auto" />
               </div>
             </div>
 
@@ -320,7 +322,7 @@ export default function PaymentConfirmPage() {
               <p className="text-sm font-medium text-gray-800 mb-2">ขั้นตอนที่ 4</p>
               <p className="text-sm text-gray-600 mb-2">จากนั้นให้ส่งรูปหลักฐานการโอนหรือสลิปในช่องแชท</p>
               <div className="rounded-lg overflow-hidden border border-gray-200">
-                <img src={B4Img.src} alt="ขั้นตอน 4 - ส่งสลิปการโอน" className="w-full h-auto" />
+                <img src={B4Img} alt="ขั้นตอน 4 - ส่งสลิปการโอน" className="w-full h-auto" />
               </div>
             </div>
 
@@ -328,7 +330,7 @@ export default function PaymentConfirmPage() {
               <p className="text-sm font-medium text-gray-800 mb-2">ขั้นตอนที่ 5</p>
               <p className="text-sm text-gray-600 mb-2">ระบบจะทำการตรวจสอบข้อมูลไม่เกิน 5 นาทีและจะทำการตอบกลับสถานะการชำระอีกครั้ง</p>
               <div className="rounded-lg overflow-hidden border border-gray-200">
-                <img src={B5Img.src} alt="ขั้นตอน 5 - ยืนยันการชำระ" className="w-full h-auto" />
+                <img src={B5Img} alt="ขั้นตอน 5 - ยืนยันการชำระ" className="w-full h-auto" />
               </div>
             </div>
           </div>
@@ -344,5 +346,19 @@ export default function PaymentConfirmPage() {
         </button>
       </main>
     </div>
+  );
+}
+
+export default function PaymentConfirmPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#fcfafc] flex items-center justify-center">
+          <div className="text-gray-500">กำลังโหลด...</div>
+        </div>
+      }
+    >
+      <PaymentConfirmPageInner />
+    </Suspense>
   );
 }

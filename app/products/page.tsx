@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
@@ -86,7 +86,7 @@ interface Product {
   image: string | null;
 }
 
-export default function ProductsPage() {
+function ProductsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
@@ -277,5 +277,29 @@ export default function ProductsPage() {
         </footer>
       )}
     </div>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#fcfafc] pb-20">
+          <Header />
+          <main className="max-w-md mx-auto px-4 py-4">
+            <div className="flex items-center justify-between mb-6">
+              <h1 className="text-xl font-bold text-gray-900">สินค้าแนะนำ</h1>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="bg-gray-100 rounded-lg h-64 animate-pulse"></div>
+              ))}
+            </div>
+          </main>
+        </div>
+      }
+    >
+      <ProductsPageInner />
+    </Suspense>
   );
 }

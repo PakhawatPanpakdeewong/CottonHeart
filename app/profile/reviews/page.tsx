@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -60,7 +60,7 @@ function formatReviewDate(isoDate: string): string {
 
 const PLACEHOLDER_IMAGE = 'https://via.placeholder.com/80x80/E8E8E8/999999?text=ไม่มีรูป';
 
-export default function ProfileReviewsPage() {
+function ProfileReviewsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab') as TabKey | null;
@@ -293,5 +293,19 @@ export default function ProfileReviewsPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function ProfileReviewsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#fcfafc] flex items-center justify-center">
+          <div className="text-gray-500">กำลังโหลด...</div>
+        </div>
+      }
+    >
+      <ProfileReviewsPageInner />
+    </Suspense>
   );
 }
