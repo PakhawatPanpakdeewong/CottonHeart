@@ -137,6 +137,9 @@ export async function PUT(
     if (updates.length === 0) {
       return NextResponse.json({ error: 'ไม่มีข้อมูลที่จะแก้ไข' }, { status: 400 });
     }
+    // แก้ไขแล้วต้องให้แอดมินอนุมัติใหม่ (หน้าสินค้าแสดงเฉพาะ isapproved = true)
+    updates.push('isapproved = FALSE');
+    updates.push('reviewdate = NOW()');
     values.push(reviewIdNum, customerId);
     const whereIdx = idx;
     const whereIdx2 = idx + 1;

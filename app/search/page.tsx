@@ -60,6 +60,13 @@ interface Category {
   }>;
 }
 
+/** แบรนด์หนึ่งรายการใน UI — รวม brandid ที่ชื่อซ้ำในฐานข้อมูล */
+interface BrandGroup {
+  ids: number[];
+  nameTH: string;
+  nameEN: string | null;
+}
+
 interface ProductCardProps {
   id: string;
   name: string;
@@ -137,6 +144,19 @@ function SearchPageInner() {
   const [minPrice, setMinPrice] = useState<string>(searchParams.get('minPrice') || '');
   const [maxPrice, setMaxPrice] = useState<string>(searchParams.get('maxPrice') || '');
   const [sortBy, setSortBy] = useState<string>(searchParams.get('sort') || '');
+  const [brandsCatalog, setBrandsCatalog] = useState<BrandGroup[]>([]);
+  const [brandsLoading, setBrandsLoading] = useState(false);
+  const [selectedBrandIds, setSelectedBrandIds] = useState<string[]>(() => {
+    const b = searchParams.get('brands');
+    const cat = searchParams.get('category');
+    if (!cat || !b) return [];
+    return b.split(',').map((s) => s.trim()).filter(Boolean);
+  });
+  const [onSaleOnly, setOnSaleOnly] = useState(() => searchParams.get('onSale') === '1');
+  const [minRating, setMinRating] = useState<string>(() => {
+    const r = searchParams.get('minRating');
+    return r && ['3', '4', '5'].includes(r) ? r : '';
+  });
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -165,10 +185,56 @@ function SearchPageInner() {
     fetchCategories();
   }, []);
 
+  useEffect(() => {
+    if (!selectedCategory) {
+      setBrandsCatalog([]);
+      setBrandsLoading(false);
+      setSelectedBrandIds([]);
+      return;
+    }
+
+    let cancelled = false;
+    setBrandsLoading(true);
+    const load = async () => {
+      try {
+        const params = new URLSearchParams({ category: selectedCategory });
+        if (selectedSubCategory) params.set('subcategory', selectedSubCategory);
+        const response = await fetch(`/api/brands?${params.toString()}`);
+        if (!response.ok) throw new Error('brands fetch failed');
+        const data = await response.json();
+        if (cancelled) return;
+        const list: BrandGroup[] = data.brands || [];
+        setBrandsCatalog(list);
+        setSelectedBrandIds((prev) =>
+          prev.filter((id) => list.some((b) => b.ids.includes(Number(id))))
+        );
+      } catch (error) {
+        console.error('Error fetching brands:', error);
+        if (!cancelled) setBrandsCatalog([]);
+      } finally {
+        if (!cancelled) setBrandsLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCategory, selectedSubCategory]);
+
   // Search products - accepts optional overrides for initial load from URL
   const searchProducts = async (
     pageNum: number = 1,
-    overrides?: { q?: string; category?: string; subcategory?: string; minPrice?: string; maxPrice?: string; sort?: string }
+    overrides?: {
+      q?: string;
+      category?: string;
+      subcategory?: string;
+      minPrice?: string;
+      maxPrice?: string;
+      sort?: string;
+      brands?: string;
+      onSale?: boolean;
+      minRating?: string;
+    }
   ) => {
     setLoading(true);
     try {
@@ -179,6 +245,14 @@ function SearchPageInner() {
       const min = overrides?.minPrice ?? minPrice;
       const max = overrides?.maxPrice ?? maxPrice;
       const sort = overrides?.sort ?? sortBy;
+      const brandsCsv =
+        overrides?.brands !== undefined
+          ? overrides.brands
+          : selectedBrandIds.length > 0 && cat
+            ? selectedBrandIds.join(',')
+            : '';
+      const sale = overrides?.onSale ?? onSaleOnly;
+      const rating = overrides?.minRating !== undefined ? overrides.minRating : minRating;
 
       if (q) params.set('q', q);
       if (cat) params.set('category', cat);
@@ -186,6 +260,9 @@ function SearchPageInner() {
       if (min) params.set('minPrice', min);
       if (max) params.set('maxPrice', max);
       if (sort) params.set('sort', sort);
+      if (brandsCsv) params.set('brands', brandsCsv);
+      if (sale) params.set('onSale', '1');
+      if (rating) params.set('minRating', rating);
       params.set('page', pageNum.toString());
       params.set('limit', '20');
 
@@ -214,8 +291,32 @@ function SearchPageInner() {
     const min = searchParams.get('minPrice');
     const max = searchParams.get('maxPrice');
     const sort = searchParams.get('sort');
-    if (q || cat || subCat || min || max || sort) {
-      searchProducts(1, { q: q ?? undefined, category: cat ?? undefined, subcategory: subCat ?? undefined, minPrice: min ?? undefined, maxPrice: max ?? undefined, sort: sort ?? undefined });
+    const brands = searchParams.get('brands');
+    const onSale = searchParams.get('onSale') === '1';
+    const rating = searchParams.get('minRating');
+    const brandsForSearch = cat && brands ? brands : undefined;
+    if (
+      q ||
+      cat ||
+      subCat ||
+      min ||
+      max ||
+      sort ||
+      brandsForSearch ||
+      onSale ||
+      (rating && ['3', '4', '5'].includes(rating))
+    ) {
+      searchProducts(1, {
+        q: q ?? undefined,
+        category: cat ?? undefined,
+        subcategory: subCat ?? undefined,
+        minPrice: min ?? undefined,
+        maxPrice: max ?? undefined,
+        sort: sort ?? undefined,
+        brands: brandsForSearch,
+        onSale: onSale || undefined,
+        minRating: rating && ['3', '4', '5'].includes(rating) ? rating : undefined,
+      });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- รันครั้งเดียวเมื่อโหลดหน้า
   }, []);
@@ -232,12 +333,34 @@ function SearchPageInner() {
     setMaxPrice('');
     setSearchQuery('');
     setSortBy('');
+    setSelectedBrandIds([]);
+    setOnSaleOnly(false);
+    setMinRating('');
     setPage(1);
     setProducts([]);
     router.push('/search', { scroll: false });
   };
 
-  const hasActiveFilters = selectedCategory || selectedSubCategory || minPrice || maxPrice || searchQuery || sortBy;
+  /** เลือก/ยกเลิกทุก brandid ในกลุ่มชื่อเดียวกัน — ค้นหาจะได้สินค้าทุกแถวที่ใช้แบรนด์นั้นในประเภทเดียวกัน */
+  const toggleBrandGroup = (ids: number[]) => {
+    const idStrs = ids.map(String);
+    setSelectedBrandIds((prev) => {
+      const allOn = idStrs.length > 0 && idStrs.every((x) => prev.includes(x));
+      if (allOn) return prev.filter((x) => !idStrs.includes(x));
+      return Array.from(new Set([...prev, ...idStrs]));
+    });
+  };
+
+  const hasActiveFilters =
+    selectedCategory ||
+    selectedSubCategory ||
+    minPrice ||
+    maxPrice ||
+    searchQuery ||
+    sortBy ||
+    (selectedBrandIds.length > 0 && !!selectedCategory) ||
+    onSaleOnly ||
+    !!minRating;
 
   // Get available subcategories for selected category
   const availableSubCategories = selectedCategory
@@ -283,7 +406,7 @@ function SearchPageInner() {
                   <Filter className="h-5 w-5" />
                 </button>
               </DialogTrigger>
-              <DialogContent className="max-w-sm w-full mx-4 rounded-xl p-0 max-h-[70vh] flex flex-col">
+              <DialogContent className="max-w-sm w-full mx-4 rounded-xl p-0 max-h-[85vh] flex flex-col">
                 <DialogHeader className="px-5 pt-5 pb-3 border-b">
                   <DialogTitle className="text-xl font-bold">ตัวกรองสินค้า</DialogTitle>
                   <DialogDescription className="text-sm mt-1">
@@ -300,6 +423,7 @@ function SearchPageInner() {
                       onValueChange={(value) => {
                         setSelectedCategory(value);
                         setSelectedSubCategory('');
+                        setSelectedBrandIds([]);
                       }}
                     >
                       <SelectTrigger className="h-10 text-sm border-pink-500 focus:ring-pink-500">
@@ -337,6 +461,49 @@ function SearchPageInner() {
                     </div>
                   )}
 
+                  {/* แบรนด์ — แสดงหลังเลือกประเภท; รายการตามประเภท (และหมวดย่อยถ้าเลือก) */}
+                  {selectedCategory ? (
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold block">แบรนด์</label>
+                      <p className="text-xs text-gray-500 -mt-1">
+                        สินค้าทุกรายการของแบรนด์ในประเภทนี้
+                      </p>
+                      <div className="max-h-36 overflow-y-auto rounded-lg border border-gray-200 p-2 space-y-2">
+                        {brandsLoading ? (
+                          <p className="text-xs text-gray-400 py-2 text-center">กำลังโหลดแบรนด์…</p>
+                        ) : brandsCatalog.length === 0 ? (
+                          <p className="text-xs text-gray-400 py-2 text-center">ไม่มีแบรนด์ในประเภทนี้</p>
+                        ) : (
+                          brandsCatalog.map((b) => {
+                            const idStrs = b.ids.map(String);
+                            const checked =
+                              idStrs.length > 0 && idStrs.every((x) => selectedBrandIds.includes(x));
+                            return (
+                              <label
+                                key={b.ids.join('-')}
+                                className="flex items-center gap-2 text-sm cursor-pointer py-1 px-1 rounded hover:bg-gray-50"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleBrandGroup(b.ids)}
+                                  className="rounded border-gray-300 text-pink-500 focus:ring-pink-500"
+                                />
+                                <span className="line-clamp-2">
+                                  {b.nameTH || b.nameEN || `แบรนด์ #${b.ids[0]}`}
+                                </span>
+                              </label>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2.5 border border-dashed border-gray-200">
+                      เลือกประเภทสินค้าก่อนจึงจะเลือกกรองตามแบรนด์หรือหมวดหมู่เพิ่มเติมได้ค่ะ
+                    </p>
+                  )}
+
                   {/* Sort by - เรียงตาม */}
                   <div className="space-y-2">
                     <label className="text-sm font-semibold block">เรียงตาม</label>
@@ -353,6 +520,12 @@ function SearchPageInner() {
                         </SelectItem>
                         <SelectItem value="new" className="text-sm py-2">
                           สินค้าใหม่ (ตามวันที่เพิ่ม)
+                        </SelectItem>
+                        <SelectItem value="price_asc" className="text-sm py-2">
+                          ราคา: ต่ำ → สูง
+                        </SelectItem>
+                        <SelectItem value="price_desc" className="text-sm py-2">
+                          ราคา: สูง → ต่ำ
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -376,6 +549,47 @@ function SearchPageInner() {
                         placeholder="ราคาสูงสุด"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 h-10 text-sm"
                       />
+                    </div>
+                  </div>
+
+                  {/* โปรโมชัน & รีวิว */}
+                  <div className="space-y-3 pt-1 border-t border-gray-100">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={onSaleOnly}
+                        onChange={(e) => setOnSaleOnly(e.target.checked)}
+                        className="rounded border-gray-300 text-pink-500 focus:ring-pink-500"
+                      />
+                      <span className="font-semibold">เฉพาะสินค้าที่มีโปร / ส่วนลด</span>
+                    </label>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold block">คะแนนรีวิวเฉลี่ยขั้นต่ำ</label>
+                      <Select
+                        value={minRating || 'none'}
+                        onValueChange={(v) => setMinRating(v === 'none' ? '' : v)}
+                      >
+                        <SelectTrigger className="h-10 text-sm">
+                          <SelectValue placeholder="ไม่กรอง" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none" className="text-sm py-2">
+                            ไม่กรอง
+                          </SelectItem>
+                          <SelectItem value="3" className="text-sm py-2">
+                            3 ดาวขึ้นไป
+                          </SelectItem>
+                          <SelectItem value="4" className="text-sm py-2">
+                            4 ดาวขึ้นไป
+                          </SelectItem>
+                          <SelectItem value="5" className="text-sm py-2">
+                            5 ดาว
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-500">
+                        กรองเฉพาะสินค้าที่มีรีวิวและคะแนนเฉลี่ยไม่ต่ำกว่าที่เลือก
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -460,13 +674,98 @@ function SearchPageInner() {
             )}
             {sortBy && (
               <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm flex items-center gap-1">
-                {sortBy === 'new' ? 'สินค้าใหม่' : sortBy}
+                {sortBy === 'new'
+                  ? 'สินค้าใหม่'
+                  : sortBy === 'price_asc'
+                    ? 'ราคา: ต่ำ → สูง'
+                    : sortBy === 'price_desc'
+                      ? 'ราคา: สูง → ต่ำ'
+                      : sortBy}
                 <button
                   onClick={() => {
                     setSortBy('');
-                    searchProducts(1);
+                    searchProducts(1, { sort: '' });
                   }}
                   className="hover:bg-amber-200 rounded-full p-0.5"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {brandsCatalog.map((b) => {
+              const hasAny = b.ids.some((id) => selectedBrandIds.includes(String(id)));
+              if (!hasAny) return null;
+              const label = b.nameTH || b.nameEN || `แบรนด์ #${b.ids[0]}`;
+              return (
+                <span
+                  key={b.ids.join('-')}
+                  className="px-3 py-1 bg-rose-100 text-rose-800 rounded-full text-sm flex items-center gap-1 max-w-full"
+                >
+                  <span className="truncate">{label}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const idSet = new Set(b.ids.map(String));
+                      const next = selectedBrandIds.filter((x) => !idSet.has(x));
+                      setSelectedBrandIds(next);
+                      searchProducts(1, { brands: next.length ? next.join(',') : '' });
+                    }}
+                    className="hover:bg-rose-200 rounded-full p-0.5 shrink-0"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
+            {selectedBrandIds
+              .filter(
+                (bid) =>
+                  !brandsCatalog.some((b) => b.ids.includes(Number(bid)))
+              )
+              .map((bid) => (
+                <span
+                  key={`brand-${bid}`}
+                  className="px-3 py-1 bg-rose-100 text-rose-800 rounded-full text-sm flex items-center gap-1"
+                >
+                  <span className="truncate">แบรนด์ #{bid}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = selectedBrandIds.filter((x) => x !== bid);
+                      setSelectedBrandIds(next);
+                      searchProducts(1, { brands: next.length ? next.join(',') : '' });
+                    }}
+                    className="hover:bg-rose-200 rounded-full p-0.5 shrink-0"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            {onSaleOnly && (
+              <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm flex items-center gap-1">
+                มีโปร / ส่วนลด
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOnSaleOnly(false);
+                    searchProducts(1, { onSale: false });
+                  }}
+                  className="hover:bg-orange-200 rounded-full p-0.5"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {minRating && (
+              <span className="px-3 py-1 bg-cyan-100 text-cyan-800 rounded-full text-sm flex items-center gap-1">
+                รีวิวเฉลี่ย {minRating}+ ดาว
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMinRating('');
+                    searchProducts(1, { minRating: '' });
+                  }}
+                  className="hover:bg-cyan-200 rounded-full p-0.5"
                 >
                   <X className="h-3 w-3" />
                 </button>

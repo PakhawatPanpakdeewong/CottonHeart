@@ -13,6 +13,7 @@ import {
   UtensilsCrossed,
   LayoutGrid,
   Sparkles,
+  Shirt,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
@@ -27,9 +28,20 @@ interface ProductCardProps {
   image?: string | null;
   category?: string | null;
   discountLabel?: string;
+  /** แสดงว่าเป็นราคาต่อหน่วย (ไม่ใช่ยอดรวมจากออเดอร์) */
+  pricePerUnit?: boolean;
 }
 
-const ProductCard = ({ id, name, price, originalPrice, image, category, discountLabel }: ProductCardProps) => (
+const ProductCard = ({
+  id,
+  name,
+  price,
+  originalPrice,
+  image,
+  category,
+  discountLabel,
+  pricePerUnit,
+}: ProductCardProps) => (
   <Link
     href={`/products/${id}`}
     className="block bg-white rounded-lg shadow-sm border border-gray-100 p-4 flex flex-col hover:border-pink-200 transition-colors relative"
@@ -64,6 +76,9 @@ const ProductCard = ({ id, name, price, originalPrice, image, category, discount
     <div className="mt-auto">
       {originalPrice && (
         <p className="text-xs text-gray-500 line-through mb-1">จากราคา {originalPrice}</p>
+      )}
+      {pricePerUnit && (
+        <p className="text-xs text-gray-500 mb-0.5">ราคาต่อหน่วย</p>
       )}
       <p className="text-lg font-bold text-gray-900">{price} บาท</p>
     </div>
@@ -115,7 +130,7 @@ interface Category {
 const CATEGORY_STYLES = [
   { bg: 'bg-blue-50', hover: 'hover:bg-blue-100', icon: 'text-blue-600', Icon: Package },
   { bg: 'bg-green-50', hover: 'hover:bg-green-100', icon: 'text-green-600', Icon: Baby },
-  { bg: 'bg-purple-50', hover: 'hover:bg-purple-100', icon: 'text-purple-600', Icon: Sparkles },
+  { bg: 'bg-yellow-50', hover: 'hover:bg-yellow-100', icon: 'text-yellow-700', Icon: Sparkles },
   { bg: 'bg-amber-50', hover: 'hover:bg-amber-100', icon: 'text-amber-700', Icon: Heart },
   { bg: 'bg-pink-50', hover: 'hover:bg-pink-100', icon: 'text-pink-600', Icon: UtensilsCrossed },
   { bg: 'bg-slate-50', hover: 'hover:bg-slate-100', icon: 'text-slate-600', Icon: LayoutGrid },
@@ -137,6 +152,11 @@ const getCategoryStyle = (category: Category, index: number) => {
   // ของเล่น / เสริมพัฒนาการ
   if (name.includes('ของเล่น') || name.includes('พัฒนาการ')) {
     return { bg: 'bg-green-50', hover: 'hover:bg-green-100', icon: 'text-green-600', Icon: LayoutGrid };
+  }
+
+  // เสื้อผ้า
+  if (name.includes('เสื้อผ้า')) {
+    return { bg: 'bg-yellow-50', hover: 'hover:bg-yellow-100', icon: 'text-yellow-700', Icon: Shirt };
   }
 
   // ผ้าอ้อม / ผลิตภัณฑ์สำหรับผ้าอ้อม
@@ -250,60 +270,17 @@ export default function Home() {
     fetchDiscountedProducts();
   }, []);
 
-  // Fetch general products (random 10 products)
+  // สินค้าทั่วไป: สุ่มจากทั้งฐานข้อมูล (ORDER BY RANDOM() ฝั่ง API)
   useEffect(() => {
     const fetchGeneralProducts = async () => {
       try {
         setLoadingGeneral(true);
-        const response = await fetch('/api/products');
+        const response = await fetch('/api/products/random?limit=10');
         if (!response.ok) {
           throw new Error('Failed to fetch products');
         }
         const data = await response.json();
-        const products: Product[] = data.products || [];
-
-        // กระจายประเภทสินค้าให้หลากหลายขึ้น
-        const productsByCategory = new Map<string, Product[]>();
-        products.forEach((p) => {
-          const key = p.category || 'อื่นๆ';
-          if (!productsByCategory.has(key)) {
-            productsByCategory.set(key, []);
-          }
-          productsByCategory.get(key)!.push(p);
-        });
-
-        // สุ่มลำดับประเภทก่อน
-        const categoryKeys = Array.from(productsByCategory.keys()).sort(
-          () => Math.random() - 0.5
-        );
-
-        const picked: Product[] = [];
-
-        // วนเก็บสินค้าทีละชิ้นจากแต่ละประเภทแบบ round-robin
-        let index = 0;
-        while (picked.length < 10 && categoryKeys.length > 0) {
-          const categoryIndex = index % categoryKeys.length;
-          const categoryKey = categoryKeys[categoryIndex];
-          const list = productsByCategory.get(categoryKey);
-
-          if (!list || list.length === 0) {
-            categoryKeys.splice(categoryIndex, 1);
-            continue;
-          }
-
-          // สุ่มเลือกสินค้า 1 ชิ้นจากประเภทนั้น
-          const randomIdx = Math.floor(Math.random() * list.length);
-          const [product] = list.splice(randomIdx, 1);
-          picked.push(product);
-
-          if (list.length === 0) {
-            categoryKeys.splice(categoryIndex, 1);
-          } else {
-            index++;
-          }
-        }
-
-        setGeneralProducts(picked);
+        setGeneralProducts(data.products || []);
       } catch (err) {
         console.error('Error fetching general products:', err);
         setErrorGeneral(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดสินค้าทั่วไป');
@@ -371,13 +348,31 @@ export default function Home() {
             seen.add(o.productId);
             return true;
           })
-          .map((o: { productId: string; productName: string; price: number; image: string | null; category: string }) => ({
-            id: o.productId,
-            name: o.productName,
-            price: o.price,
-            image: o.image,
-            category: o.category || '',
-          }));
+          .map(
+            (o: {
+              productId: string;
+              productName: string;
+              price: number;
+              unitPrice?: number;
+              quantity?: number;
+              image: string | null;
+              category: string;
+            }) => {
+              const perUnit =
+                typeof o.unitPrice === 'number' && o.unitPrice > 0
+                  ? o.unitPrice
+                  : o.quantity && o.quantity > 0
+                    ? o.price / o.quantity
+                    : o.price;
+              return {
+                id: o.productId,
+                name: o.productName,
+                price: perUnit,
+                image: o.image,
+                category: o.category || '',
+              };
+            }
+          );
         setPreviouslyOrderedProducts(unique);
       } catch {
         setPreviouslyOrderedProducts([]);
@@ -490,6 +485,7 @@ export default function Home() {
                     price={product.price.toFixed(2)}
                     image={product.image}
                     category={product.category}
+                    pricePerUnit
                   />
                 ))}
               </div>
@@ -601,7 +597,7 @@ export default function Home() {
           </section>
         )}
         
-        {/* General Products - สินค้าทั่วไป (สุ่ม 10 อย่าง) */}
+        {/* General Products - สินค้าทั่วไป (สุ่มจากฐานข้อมูล) */}
         <section>
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-900">สินค้าทั่วไป</h2>

@@ -41,6 +41,8 @@ interface OrderDetail {
   paymentTransactionId: string | null;
   paymentStatus: string | null;
   referenceCode: string | null;
+  /** จาก payments.paidamount — ใช้ร่วมกับ paymentstatus ในแถบชมพู */
+  paidAmount: number | null;
 }
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
@@ -60,6 +62,9 @@ const STATUS_BANNER_COLOR: Record<OrderStatus, string> = {
 };
 
 const PLACEHOLDER_IMAGE = 'https://via.placeholder.com/80x80/E8E8E8/999999?text=ไม่มีรูปภาพ';
+
+/** รหัสอ้างอิงที่ระบบสร้างให้ลูกค้าใส่ตอนโอน (เก็บใน orders.notes) */
+const SHOP_TRANSFER_REFERENCE_PATTERN = /^[0-9A-Z]{6}$/;
 
 function maskPhone(phone: string): string {
   if (!phone || phone.length < 4) return 'XXX-XXX-XXXX';
@@ -94,6 +99,8 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [paymentNavLoading, setPaymentNavLoading] = useState(false);
+  const [paymentNavError, setPaymentNavError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -160,13 +167,90 @@ export default function OrderDetailPage() {
     );
   }
 
-  const statusLabel = STATUS_LABELS[order.orderStatus];
-  const bannerColor = STATUS_BANNER_COLOR[order.orderStatus];
   // อนุญาตยกเลิกได้เฉพาะสถานะ ordered (pending) เท่านั้น - ถ้า confirmed แล้วไม่อนุญาต
   const canCancel = order.orderStatus === 'ordered';
   // แสดงปุ่มซื้ออีกครั้ง เมื่อออเดอร์ถูกยกเลิก หรือจัดส่งสำเร็จแล้ว
   const canBuyAgain = order.orderStatus === 'cancelled' || order.orderStatus === 'delivered';
-  const isPaid = order.paymentStatus === 'paid' || !!order.paymentDate;
+  const paymentStatusNorm = (order.paymentStatus || '').toLowerCase();
+  const isPaid =
+    paymentStatusNorm === 'paid' ||
+    paymentStatusNorm === 'completed' ||
+    !!order.paymentDate;
+
+  /** ยอดเต็มที่ต้องชำระ (สินค้า + จัดส่ง) */
+  const orderFullDue = order.paymentAmount ?? order.totalAmount;
+  /** ยอดที่ลูกค้าโอนมาแล้ว (โอนขาด = มากกว่า 0 แต่น้อยกว่า orderFullDue) */
+  const paidTowardOrder =
+    order.paidAmount != null && Number.isFinite(order.paidAmount) ? order.paidAmount : 0;
+  /** ยอดคงเหลือที่ต้องชำระ */
+  const remainingToPay = Math.max(0, orderFullDue - paidTowardOrder);
+
+  /** paidamount ไม่ได้บันทึก / เป็น 0 (เคสเก่า: ถือว่าชำระครบเมื่อ completed) */
+  const paidAmountIsZeroOrUnset = (() => {
+    const v = order.paidAmount;
+    if (v == null || (typeof v === 'number' && Number.isNaN(v))) return true;
+    return Math.abs(v) < 0.005;
+  })();
+  /** แถบชมพู "ชำระแล้ว": completed และ (ไม่มียอดโอนบันทึก หรือยอดคงเหลือเป็น 0) */
+  const pinkBarShowsPaid =
+    paymentStatusNorm === 'completed' &&
+    (paidAmountIsZeroOrUnset || remainingToPay < 0.005);
+  const pinkBarDisplayAmount = pinkBarShowsPaid ? orderFullDue : remainingToPay;
+  const hasPartialPayment = paidTowardOrder > 0.005 && !pinkBarShowsPaid;
+  const pmNorm = (order.paymentMethod || '').toLowerCase();
+  const isCod =
+    pmNorm.includes('เงินสด') ||
+    pmNorm.includes('cash') ||
+    pmNorm.includes('cod') ||
+    pmNorm.includes('ปลายทาง');
+  const notesTrimmed = (order.referenceCode || '').trim();
+  const hasShopTransferReference = SHOP_TRANSFER_REFERENCE_PATTERN.test(notesTrimmed);
+  /** ยังไม่มีรหัสอ้างอิงร้าน (6 หลัก) และยังต้องชำระโอน — ไปหน้า QR / วิธีโอน */
+  const canOpenPaymentInstructions =
+    !hasShopTransferReference &&
+    !isPaid &&
+    !isCod &&
+    order.orderStatus !== 'cancelled' &&
+    order.orderStatus !== 'delivered';
+
+  /** แถบด้านบน: ยังไม่ชำระ + โอนเงิน (ไม่ใช่ปลายทาง) + ออเดอร์ยังใช้งานได้ */
+  const showAwaitingPaymentBanner =
+    !isPaid &&
+    !isCod &&
+    order.orderStatus !== 'cancelled' &&
+    order.orderStatus !== 'delivered';
+
+  const bannerColor = showAwaitingPaymentBanner
+    ? 'bg-amber-500'
+    : STATUS_BANNER_COLOR[order.orderStatus];
+  const statusLabel = STATUS_LABELS[order.orderStatus];
+
+  const goToPaymentInstructions = async () => {
+    if (!order) return;
+    const email = user?.username?.includes('@')
+      ? user.username
+      : user?.email || user?.username;
+    if (!email) return;
+    setPaymentNavLoading(true);
+    setPaymentNavError(null);
+    try {
+      const res = await fetch(`/api/orders/${order.orderId}/reference-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPaymentNavError(typeof data.error === 'string' ? data.error : 'ไม่สามารถสร้างเลขอ้างอิงได้');
+        return;
+      }
+      router.push(`/checkout/payment?orderId=${order.orderId}`);
+    } catch {
+      setPaymentNavError('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+    } finally {
+      setPaymentNavLoading(false);
+    }
+  };
 
   const handleBuyAgain = () => {
     if (!order) return;
@@ -202,9 +286,18 @@ export default function OrderDetailPage() {
         {/* Page Title */}
         <h1 className="text-xl font-bold text-gray-900 mb-4">รายละเอียดคำสั่งซื้อ</h1>
 
-        {/* Order Status Banner */}
-        <div className={`${bannerColor} text-white text-center py-3 px-4 rounded-lg mb-6`}>
-          {statusLabel}
+        {/* Order Status Banner — โหมดรอชำระเงินแยกจากสถานะจัดเตรียม/จัดส่ง */}
+        <div className={`${bannerColor} text-white text-center py-3 px-4 rounded-lg mb-6 shadow-sm`}>
+          {showAwaitingPaymentBanner ? (
+            <>
+              <p className="font-semibold text-base">รอชำระเงิน</p>
+              <p className="text-sm text-white/95 mt-1.5 leading-snug font-normal">
+                กรุณาโอนตามยอดด้านล่างภายในเวลาที่กำหนด ร้านจะดำเนินการต่อเมื่อได้รับการชำระแล้ว
+              </p>
+            </>
+          ) : (
+            statusLabel
+          )}
         </div>
 
         {/* Shipping Information */}
@@ -245,12 +338,30 @@ export default function OrderDetailPage() {
             <p className="text-gray-700 font-medium">
               <span className="text-gray-500">ยอดการสั่งซื้อ:</span> ฿ {order.subtotal.toFixed(2)}
             </p>
-            {order.referenceCode && (
+            {hasShopTransferReference && (
               <div className="mt-3 p-3 rounded-lg bg-green-50 border-2 border-green-200">
                 <p className="text-xs text-gray-600 mb-1">เลขยืนยันการโอน</p>
                 <p className="font-mono text-lg font-bold text-green-700 tracking-wider">
-                  {order.referenceCode}
+                  {notesTrimmed}
                 </p>
+              </div>
+            )}
+            {canOpenPaymentInstructions && (
+              <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                <p className="text-xs text-amber-900 mb-2">
+                  <span className="font-semibold">เลขอ้างอิงโอน:</span> ยังไม่มี — กดปุ่มเพื่อสร้างรหัส 6 หลักและเปิดหน้าสแกน QR / วิธีโอน (มีปุ่มเดียวกันในหัวข้อการชำระเงินด้านล่างด้วย)
+                </p>
+                {paymentNavError && (
+                  <p className="text-xs text-red-600 mb-2">{paymentNavError}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={goToPaymentInstructions}
+                  disabled={paymentNavLoading}
+                  className="w-full py-2.5 px-3 rounded-lg bg-pink-500 text-white text-sm font-medium hover:bg-pink-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                >
+                  {paymentNavLoading ? 'กำลังดำเนินการ...' : 'ไปหน้าชำระเงินและรับเลขอ้างอิง'}
+                </button>
               </div>
             )}
           </div>
@@ -308,16 +419,41 @@ export default function OrderDetailPage() {
             <div className="mt-3 p-3 rounded-lg bg-pink-50 border border-pink-200 flex items-center justify-between">
               <div className="flex flex-col">
                 <span className="text-xs font-medium text-pink-700 uppercase tracking-wide">
-                  {isPaid ? 'ชำระแล้ว' : 'ยอดที่ต้องชำระ'}
+                  {pinkBarShowsPaid ? 'ชำระแล้ว' : 'ยอดที่ต้องชำระ'}
                 </span>
-                <span className="text-[11px] text-gray-500">
-                  รวมค่าสินค้าและค่าจัดส่งทั้งหมด
-                </span>
+                {pinkBarShowsPaid || !hasPartialPayment ? (
+                  <span className="text-[11px] text-gray-500">รวมค่าสินค้าและค่าจัดส่งทั้งหมด</span>
+                ) : (
+                  <div className="text-[11px] text-gray-500">
+                    <span className="block">ยอดคงเหลือ</span>
+                    <span className="block text-[10px] text-gray-500 leading-snug mt-1">
+                      (ยอดเต็ม ฿ {orderFullDue.toFixed(2)} − โอนมาแล้ว ฿ {paidTowardOrder.toFixed(2)})
+                    </span>
+                  </div>
+                )}
               </div>
               <span className="text-xl font-bold text-pink-500 tracking-tight ml-4">
-                ฿ {(order.paymentAmount ?? order.totalAmount).toFixed(2)}
+                ฿ {pinkBarDisplayAmount.toFixed(2)}
               </span>
             </div>
+
+            {canOpenPaymentInstructions && (
+              <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                <p className="text-xs text-amber-900 mb-2 font-medium">ยังไม่ได้รับเลขอ้างอิงสำหรับโอนเงิน</p>
+                <p className="text-[11px] text-amber-800 mb-3">
+                  กดเพื่อสร้างรหัส 6 หลัก แล้วไปหน้าแสดง QR และขั้นตอนโอน
+                </p>
+                {paymentNavError && <p className="text-xs text-red-600 mb-2">{paymentNavError}</p>}
+                <button
+                  type="button"
+                  onClick={goToPaymentInstructions}
+                  disabled={paymentNavLoading}
+                  className="w-full py-2.5 px-3 rounded-lg bg-pink-500 text-white text-sm font-medium hover:bg-pink-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                >
+                  {paymentNavLoading ? 'กำลังดำเนินการ...' : 'ไปหน้าชำระเงินและรับเลขอ้างอิง'}
+                </button>
+              </div>
+            )}
 
             {order.paymentDate && (
               <p className="text-gray-700">

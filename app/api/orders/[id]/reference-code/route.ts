@@ -61,10 +61,12 @@ export async function POST(
       payment_deadline_at: string | null;
     };
 
-    let referenceCode = row.reference_code;
+    const existing = (row.reference_code || '').trim();
+    const isValidShopRef = /^[0-9A-Z]{6}$/.test(existing);
+    let referenceCode = existing;
 
-    // ถ้ายังไม่เคยมีรหัสอ้างอิง ให้สร้างใหม่และบันทึกลง orders.notes
-    if (!referenceCode) {
+    // ถ้ายังไม่มีรหัสอ้างอิงร้าน (6 หลัก) ให้สร้างใหม่ — notes อื่นที่ไม่ใช่รูปแบบนี้จะถูกแทนที่
+    if (!isValidShopRef) {
       referenceCode = generateReferenceCode();
       await pool.query(
         `UPDATE orders

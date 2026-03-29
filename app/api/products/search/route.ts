@@ -12,7 +12,11 @@ export async function GET(request: NextRequest) {
     const subCategoryId = searchParams.get('subcategory'); // SubCategory ID
     const minPrice = searchParams.get('minPrice'); // Minimum price
     const maxPrice = searchParams.get('maxPrice'); // Maximum price
-    const sort = searchParams.get('sort') || ''; // sort=new = เรียงตามวันที่เพิ่มล่าสุด
+    const sort = searchParams.get('sort') || ''; // new | price_asc | price_desc
+    const brandsParam = searchParams.get('brands'); // comma-separated brand IDs
+    const onSaleRaw = searchParams.get('onSale');
+    const onSale = onSaleRaw === '1' || onSaleRaw === 'true';
+    const minRatingParam = searchParams.get('minRating');
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '20', 10);
     const offset = (page - 1) * limit;
@@ -93,6 +97,41 @@ export async function GET(request: NextRequest) {
       paramIndex++;
     }
 
+    // กรองแบรนด์ใช้ร่วมกับประเภทเท่านั้น (สอดคล้องกับ UI)
+    if (brandsParam && categoryId) {
+      const brandIds = brandsParam
+        .split(',')
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => !Number.isNaN(n) && n > 0);
+      if (brandIds.length > 0) {
+        query += ` AND p.brandid = ANY($${paramIndex}::int[])`;
+        queryParams.push(brandIds);
+        paramIndex++;
+      }
+    }
+
+    if (onSale) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM discounts d
+        WHERE d.variantid = pv.variantid
+          AND d.isactive = true
+          AND d.startdate <= CURRENT_TIMESTAMP
+          AND d.enddate >= CURRENT_TIMESTAMP
+          AND (d.usagelimit IS NULL OR d.usedcount < d.usagelimit)
+      )`;
+    }
+
+    if (minRatingParam) {
+      const minR = parseInt(minRatingParam, 10);
+      if (!Number.isNaN(minR) && minR >= 1 && minR <= 5) {
+        query += ` AND p.productid IN (
+          SELECT productid FROM reviews GROUP BY productid HAVING AVG(rating::numeric) >= $${paramIndex}
+        )`;
+        queryParams.push(minR);
+        paramIndex++;
+      }
+    }
+
     // Order by product ID and price (for DISTINCT ON)
     query += ` ORDER BY p.productid, pv.price ASC NULLS LAST`;
 
@@ -108,9 +147,13 @@ export async function GET(request: NextRequest) {
     const totalCount = parseInt(countResult.rows[0].count, 10);
     const totalPages = Math.ceil(totalCount / limit);
 
-    // When sort=new: wrap in subquery to order by created date (newest first)
+    // Final ordering (after DISTINCT ON)
     if (sort === 'new') {
       query = `SELECT * FROM (${query}) AS sub ORDER BY createddate DESC NULLS LAST`;
+    } else if (sort === 'price_asc') {
+      query = `SELECT * FROM (${query}) AS sub ORDER BY price::numeric ASC NULLS LAST`;
+    } else if (sort === 'price_desc') {
+      query = `SELECT * FROM (${query}) AS sub ORDER BY price::numeric DESC NULLS LAST`;
     }
 
     // Add limit and offset

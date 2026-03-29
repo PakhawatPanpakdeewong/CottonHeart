@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
-import { Trash2, Minus, Plus, ArrowLeft, ChevronUp } from 'lucide-react';
+import { Trash2, Minus, Plus, ChevronUp } from 'lucide-react';
 
 type StockResult = { id: string; available: number; sufficient: boolean };
 
@@ -94,34 +94,75 @@ export default function CartPage() {
   };
 
   if (cartItems.length === 0) {
+    const emptyShipping = 0;
+    const emptyTotal = 0;
     return (
       <div className="min-h-screen bg-[#fcfafc]">
         <Header />
-        <div className="max-w-md mx-auto px-4 py-3 border-b border-gray-200">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="text-gray-700 hover:text-gray-900">
-              <ArrowLeft className="w-6 h-6" />
-            </Link>
-            <h1 className="text-xl font-bold text-gray-900">ตะกร้าสินค้า</h1>
+
+        <div className="max-w-md mx-auto px-4 pt-8 pb-4">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">ตระกร้าสินค้า</h1>
+          <div className="text-sm text-gray-500 mb-4">
+            <Link href="/" className="hover:text-gray-700">ร้านค้า</Link>
+            <span className="mx-2">/</span>
+            <span>รถเข็นช็อปปิ้ง</span>
           </div>
         </div>
-        <main className="max-w-md mx-auto px-4 py-12">
-          <div className="text-center">
-            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+        <main className="max-w-md mx-auto px-4 pb-28">
+          <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">จำนวนรายการสินค้า (ที่เลือก)</span>
+                <span className="text-gray-900 font-medium">0 / 0 รายการ</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">จำนวนชิ้นทั้งหมด (ที่เลือก)</span>
+                <span className="text-gray-900 font-medium">0 / 0 ชิ้น</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">ยอดรวม</span>
+                <span className="text-gray-900 font-medium">฿ {emptyTotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">ค่าจัดส่ง (ขั้นต้น)</span>
+                <span className="text-gray-900 font-medium">฿ {emptyShipping.toFixed(2)}</span>
+              </div>
+              <div className="border-t border-gray-200 pt-2 flex justify-between">
+                <span className="text-base font-semibold text-gray-900">รวมทั้งหมด</span>
+                <span className="text-lg font-bold text-pink-500">฿ {emptyTotal.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">ตะกร้าว่างเปล่า</h2>
-            <p className="text-gray-500 mb-6">ยังไม่มีสินค้าในตะกร้าของคุณ</p>
+            <p className="text-gray-900 font-medium mb-1">ไม่มีสินค้าในตะกร้า</p>
+            <p className="text-sm text-gray-500 mb-6">เลือกสินค้าเพื่อเพิ่มลงตะกร้าได้จากหน้าร้านได้เลยค่ะ</p>
             <Link
               href="/"
-              className="inline-block px-6 py-3 bg-pink-500 text-white rounded-lg font-medium hover:bg-pink-600 transition-colors"
+              className="inline-block w-full max-w-xs py-2.5 bg-pink-500 text-white rounded-lg font-semibold text-sm hover:bg-pink-600 transition-colors text-center"
             >
               เริ่มช้อปปิ้ง
             </Link>
           </div>
         </main>
+
+        <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
+          <div className="max-w-md mx-auto">
+            <button
+              type="button"
+              disabled
+              className="w-full py-2.5 rounded-lg font-semibold transition-colors text-sm bg-gray-300 text-gray-500 cursor-not-allowed"
+            >
+              ดำเนินการสั่งซื้อ
+            </button>
+          </div>
+        </footer>
       </div>
     );
   }

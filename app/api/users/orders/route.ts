@@ -109,6 +109,7 @@ export async function GET(request: NextRequest) {
         variant: row.sku,
         variantId: row.variantid?.toString(),
         quantity: row.quantityordered,
+        unitPrice: parseFloat(row.unitprice) || 0,
         price: parseFloat(row.totalprice) || parseFloat(row.unitprice) * row.quantityordered,
         status: effectiveStatus,
         totalAmount: parseFloat(row.totalamount) || 0,

@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { useFavorites } from '@/context/FavoritesContext';
 import { useAuth } from '@/context/AuthContext';
 import Header from '@/components/Header';
-import { ChevronUp } from 'lucide-react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 
 // Product type from API
 interface Product {
@@ -31,7 +31,19 @@ interface Product {
   reviews: { id: string; user: string; rating: number; comment: string; date: string }[];
   totalReviews: number;
   similarProducts: { id: string; name: string; price: number; image: string | null }[];
-  variants?: { id: number; sku: string; price: number }[];
+  variants?: {
+    id: number;
+    sku: string;
+    price: number;
+    attributeValues?: {
+      attributeId: number;
+      nameTH: string;
+      nameEN?: string | null;
+      valueTH: string;
+      valueEN?: string | null;
+      valueCode: string;
+    }[];
+  }[];
 }
 
 const ArrowLeftIcon = () => (
@@ -67,20 +79,48 @@ const HeartIcon = ({ filled = false }: { filled?: boolean }) => (
 // Placeholder for when no images
 const PLACEHOLDER_IMAGE = 'https://via.placeholder.com/400x400/E8E8E8/999999?text=ไม่มีรูปภาพ';
 
-// Calculate delivery date
+const THAI_MONTHS = [
+  'มกราคม',
+  'กุมภาพันธ์',
+  'มีนาคม',
+  'เมษายน',
+  'พฤษภาคม',
+  'มิถุนายน',
+  'กรกฎาคม',
+  'สิงหาคม',
+  'กันยายน',
+  'ตุลาคม',
+  'พฤศจิกายน',
+  'ธันวาคม',
+];
+
+function formatThaiDate(d: Date) {
+  return {
+    day: d.getDate(),
+    month: THAI_MONTHS[d.getMonth()],
+    yearBE: d.getFullYear() + 543,
+  };
+}
+
+/** ช่วงวันที่จัดส่งประมาณ: เริ่มจาก (วันนี้ + days) ถึง +2 วันติดปฏิทิน (ไม่บวกเลขวันตรงๆ เพื่อไม่ให้เกินวันในเดือน) */
 const getDeliveryDate = (days: number) => {
+  const n = Math.max(1, Math.floor(days));
   const today = new Date();
-  const deliveryDate = new Date(today);
-  deliveryDate.setDate(today.getDate() + days);
-  
-  const months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 
-                  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
-  
-  const day = deliveryDate.getDate();
-  const month = months[deliveryDate.getMonth()];
-  const year = deliveryDate.getFullYear() + 543; // Convert to Buddhist era
-  
-  return `${day}-${day + 2} ${month} ${year}`;
+  const from = new Date(today);
+  from.setDate(today.getDate() + n);
+  const to = new Date(from);
+  to.setDate(from.getDate() + 2);
+
+  const a = formatThaiDate(from);
+  const b = formatThaiDate(to);
+
+  if (a.month === b.month && a.yearBE === b.yearBE) {
+    return `${a.day}-${b.day} ${a.month} ${a.yearBE}`;
+  }
+  if (a.yearBE === b.yearBE) {
+    return `${a.day} ${a.month} – ${b.day} ${b.month} ${a.yearBE}`;
+  }
+  return `${a.day} ${a.month} ${a.yearBE} – ${b.day} ${b.month} ${b.yearBE}`;
 };
 
 export default function ProductDetailPage() {
@@ -137,6 +177,10 @@ export default function ProductDetailPage() {
       }
     };
     fetchProduct();
+  }, [productId]);
+
+  useEffect(() => {
+    setShowAllReviews(false);
   }, [productId]);
 
   const totalItems = getTotalItems();
@@ -221,11 +265,11 @@ export default function ProductDetailPage() {
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  const displayedReviews = product
-    ? showAllReviews
-      ? product.reviews
-      : product.reviews.slice(0, 3)
-    : [];
+  const displayedReviews = useMemo(() => {
+    const reviews = product?.reviews ?? [];
+    if (showAllReviews) return reviews;
+    return reviews.slice(0, 3);
+  }, [product?.reviews, showAllReviews]);
 
   // Loading state
   if (loading) {
@@ -307,19 +351,21 @@ export default function ProductDetailPage() {
             </button>
             <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={handleAddToCart}
                 disabled={isOutOfStock || !canAddMore}
-                className={`w-10 h-10 rounded-full shadow-md flex items-center justify-center transition-colors ${
+                className={`flex items-center justify-center gap-2 rounded-full border pl-3 pr-3.5 py-2 shrink-0 text-xs sm:text-sm font-semibold shadow-sm transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-400 focus-visible:ring-offset-2 whitespace-nowrap ${
                   isOutOfStock || !canAddMore
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-pink-500 text-white hover:bg-pink-600'
+                    ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-500'
+                    : 'border-pink-200/90 bg-gradient-to-r from-pink-50 via-rose-50/80 to-pink-50 text-pink-600 hover:border-pink-300 hover:from-pink-100 hover:to-rose-100 hover:text-pink-700 hover:shadow-md'
                 }`}
-                aria-label={isOutOfStock ? 'สินค้าหมด' : 'เก็บเข้าตะกร้า'}
-                title={isOutOfStock ? 'สินค้าหมด' : canAddMore ? 'เก็บเข้าตะกร้า' : 'จำนวนในคลังไม่เพียงพอ'}
+                aria-label={isOutOfStock ? 'สินค้าหมด' : 'เพิ่มเข้าตะกร้า'}
+                title={isOutOfStock ? 'สินค้าหมด' : canAddMore ? 'เพิ่มเข้าตะกร้า' : 'จำนวนในคลังไม่เพียงพอ'}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-4 w-4 shrink-0 opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
+                เพิ่มเข้าตะกร้า
               </button>
               <button
                 onClick={() => {
@@ -422,16 +468,33 @@ export default function ProductDetailPage() {
                   )}
                   {product.description.length > 200 && (
                     <button
+                      type="button"
                       onClick={() => setShowFullDescription(!showFullDescription)}
-                      className="text-gray-700 text-sm mt-2 hover:text-gray-900 underline"
+                      className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-pink-600 transition-colors hover:text-pink-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-400 focus-visible:ring-offset-2 rounded-sm"
                     >
-                      {showFullDescription ? 'ซ่อนรายละเอียด' : 'ดูรายละเอียดเพิ่มเติม'}
+                      {showFullDescription ? (
+                        <>
+                          <ChevronUp className="h-4 w-4 shrink-0" aria-hidden />
+                          ซ่อนรายละเอียด
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-4 w-4 shrink-0" aria-hidden />
+                          ดูรายละเอียดเพิ่มเติม
+                        </>
+                      )}
                     </button>
                   )}
                 </div>
               ) : (
                 <p className="text-sm text-gray-500">ไม่มีรายละเอียดสินค้า</p>
               )}
+              <div className="mt-4 border-t border-gray-100 pt-4 space-y-1.5 text-sm text-gray-600">
+                <p>ขายแล้ว {product.soldCount} ชิ้น</p>
+                <p>
+                  จัดส่งภายใน {product.shippingDays} วัน (ประมาณ {deliveryDate})
+                </p>
+              </div>
             </div>
 
             {/* Price & Stock */}
@@ -463,93 +526,108 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-        {/* Rating, Delivery - below card */}
-        <div className="mx-4 mt-4 px-4 py-3 bg-white rounded-xl">
-          <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2">
-              <div className="flex gap-0.5">
-                {[...Array(5)].map((_, i) => (
-                  <StarIcon key={i} filled={i < Math.floor(product.rating)} />
-                ))}
-              </div>
-              <span className="text-gray-700">{product.rating.toFixed(1)}</span>
-            </div>
-            <span className="text-gray-600">ขายแล้ว {product.soldCount} ชิ้น</span>
-          </div>
-          <p className="text-sm text-gray-600 mt-2">
-            จัดส่งภายใน {product.shippingDays} วัน (ประมาณ {deliveryDate})
-          </p>
-        </div>
-
         {/* Reviews */}
-        <div className="mx-4 mt-4 px-4 py-4 bg-white rounded-xl">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">
-              รีวิว ({product.totalReviews})
-            </h2>
-            <div className="flex items-center gap-1">
-              {[...Array(5)].map((_, i) => (
-                <StarIcon key={i} filled={i < Math.floor(product.rating)} />
-              ))}
-              <span className="text-sm font-medium text-gray-900 ml-1">
-                {product.rating.toFixed(1)}
-              </span>
+        <div className="mx-4 mt-4 overflow-hidden rounded-2xl border border-gray-100/90 bg-white shadow-[0_4px_24px_-8px_rgba(0,0,0,0.06)] ring-1 ring-pink-50/50">
+          <div className="border-b border-gray-100 bg-gradient-to-br from-white via-pink-50/20 to-rose-50/10 px-4 py-4 sm:px-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold tracking-tight text-gray-900">รีวิวจากลูกค้า</h2>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {product.totalReviews} รีวิวที่แสดงผ่านการอนุมัติ
+                </p>
+              </div>
+              <div
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-amber-100/90 bg-gradient-to-br from-amber-50 to-orange-50/60 px-3 py-2 shadow-sm"
+                aria-label={`คะแนนเฉลี่ย ${product.rating.toFixed(1)} จาก 5`}
+              >
+                <div className="flex gap-0.5">
+                  {[...Array(5)].map((_, i) => (
+                    <StarIcon key={i} filled={i < Math.floor(product.rating)} />
+                  ))}
+                </div>
+                <span className="text-base font-bold tabular-nums text-gray-900">
+                  {product.rating.toFixed(1)}
+                </span>
+              </div>
             </div>
           </div>
 
-          {(product.reviews?.length ?? 0) > 0 ? (
-            <>
-              <div className="space-y-4">
-                {displayedReviews.map((review) => (
-                  <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="flex items-center gap-1">
-                        {[...Array(5)].map((_, i) => (
-                          <StarIcon key={i} filled={i < review.rating} />
-                        ))}
+          <div className="px-4 py-4 sm:px-5">
+            {(product.reviews?.length ?? 0) > 0 ? (
+              <>
+                <div className="space-y-3">
+                  {displayedReviews.map((review) => (
+                    <article
+                      key={review.id}
+                      className="rounded-xl border border-gray-100/80 bg-gray-50/30 p-3.5 transition-colors hover:bg-gray-50/60 sm:p-4"
+                    >
+                      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <div className="flex items-center gap-0.5">
+                          {[...Array(5)].map((_, i) => (
+                            <StarIcon key={i} filled={i < review.rating} />
+                          ))}
+                        </div>
+                        <span className="text-xs font-medium text-gray-600">{review.user}</span>
+                        {review.date ? (
+                          <span className="text-xs text-gray-400">
+                            ·{' '}
+                            {new Date(review.date).toLocaleDateString('th-TH', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </span>
+                        ) : null}
                       </div>
-                      <span className="text-xs text-gray-500">{review.user}</span>
-                      {review.date && (
-                        <span className="text-xs text-gray-400">
-                          {new Date(review.date).toLocaleDateString('th-TH', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                          })}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-700">{review.comment}</p>
+                      <p className="text-sm leading-relaxed text-gray-800">{review.comment}</p>
+                    </article>
+                  ))}
+                </div>
+
+                {product.reviews.length > 3 ? (
+                  <div className="mt-4 flex justify-center border-t border-gray-100 pt-4">
+                    {!showAllReviews ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllReviews(true)}
+                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-pink-600 transition-colors hover:text-pink-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-400 focus-visible:ring-offset-2 rounded-sm"
+                      >
+                        <ChevronDown className="h-4 w-4 shrink-0" aria-hidden />
+                        ดูรีวิวเพิ่มเติม
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllReviews(false)}
+                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-pink-600 transition-colors hover:text-pink-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-400 focus-visible:ring-offset-2 rounded-sm"
+                      >
+                        <ChevronUp className="h-4 w-4 shrink-0" aria-hidden />
+                        ซ่อนรีวิว
+                      </button>
+                    )}
                   </div>
-                ))}
+                ) : null}
+              </>
+            ) : (
+              <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/40 py-10 text-center">
+                <p className="text-sm text-gray-500">ยังไม่มีรีวิว</p>
               </div>
+            )}
 
-              {(product.reviews?.length ?? 0) > 3 && !showAllReviews && (
-                <button
-                  onClick={() => setShowAllReviews(true)}
-                  className="mt-4 text-sm text-gray-700 hover:text-gray-900 underline"
+            {isAuthenticated && (
+              <div className="mt-5 rounded-xl border border-pink-100/60 bg-pink-50/25 px-4 py-3.5">
+                <Link
+                  href="/profile/reviews"
+                  className="text-sm font-semibold text-pink-600 transition-colors hover:text-pink-700"
                 >
-                  ดูรีวิวเพิ่มเติม
-                </button>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-gray-500 py-4">ยังไม่มีรีวิว</p>
-          )}
-
-          {isAuthenticated && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <Link
-                href="/profile/reviews"
-                className="text-sm text-pink-500 hover:text-pink-600 font-medium"
-              >
-                {product.totalReviews > 0 ? 'เขียนรีวิวสินค้า' : 'เป็นคนแรกที่รีวิวสินค้านี้'}
-              </Link>
-              <p className="text-xs text-gray-500 mt-1">
-                ซื้อสินค้าแล้วรีวิวได้ที่ การรีวิว ในโปรไฟล์
-              </p>
-            </div>
-          )}
+                  {product.totalReviews > 0 ? 'เขียนรีวิวสินค้า' : 'เป็นคนแรกที่รีวิวสินค้านี้'}
+                </Link>
+                <p className="mt-1 text-xs leading-relaxed text-gray-600">
+                  ซื้อสินค้าแล้วรีวิวได้ที่ <span className="font-medium text-gray-700">การรีวิว</span> ในโปรไฟล์
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* สินค้าที่คล้ายกัน - section ท้ายสุด */}

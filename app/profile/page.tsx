@@ -15,7 +15,9 @@ import {
   LogOut,
   CreditCard,
   ChevronUp,
+  ChevronRight,
   ExternalLink,
+  Landmark,
 } from 'lucide-react';
 
 // Order status types
@@ -66,6 +68,20 @@ function maskPhone(phone: string): string {
   return `XXX-XXX-${phone.slice(-4)}`;
 }
 
+/** ออเดอร์แรกที่ยังรอชำระ (ใช้เมื่อเปิดเมนูติดต่อจากปุ่มหลักโดยไม่ระบุออเดอร์) */
+function getFirstPendingPaymentOrderId(orderItems: OrderItem[]): string | null {
+  for (const item of orderItems) {
+    const oid = item.orderId;
+    if (!oid) continue;
+    const needsPayment =
+      item.status !== 'cancelled' &&
+      (item.status === 'ordered' || item.status === 'confirmed') &&
+      item.paymentStatus !== 'completed';
+    if (needsPayment) return oid;
+  }
+  return null;
+}
+
 function formatPaymentDeadline(isoDate: string | null | undefined): string {
   if (!isoDate) return '—';
   const d = new Date(isoDate);
@@ -98,10 +114,23 @@ export default function ProfilePage() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showContactOptions, setShowContactOptions] = useState(false);
   const [isClosingContact, setIsClosingContact] = useState(false);
+  /** ออเดอร์ที่ผู้ใช้เลือกเมื่อเปิดเมนูจากการ์ดออเดอร์ (ถ้า null = เปิดจากปุ่มหลัก) */
+  const [contactOrderId, setContactOrderId] = useState<string | null>(null);
 
-  const openContactOptions = () => {
+  const openContactOptions = (orderIdForPayment: string | null = null) => {
+    setContactOrderId(orderIdForPayment);
     setIsClosingContact(false);
     setShowContactOptions(true);
+  };
+
+  const handleBankTransferFromModal = () => {
+    const oid = contactOrderId ?? getFirstPendingPaymentOrderId(orders);
+    if (!oid) {
+      window.alert('ไม่พบออเดอร์ที่รอชำระเงิน กรุณาสั่งซื้อสินค้าหรือเลือกออเดอร์จากประวัติด้านล่าง');
+      return;
+    }
+    closeContactOptions();
+    router.push(`/checkout/payment?orderId=${encodeURIComponent(oid)}&hideContinue=1`);
   };
 
   const closeContactOptions = () => {
@@ -294,7 +323,7 @@ export default function ProfilePage() {
           </Link>
           <button
             type="button"
-            onClick={openContactOptions}
+            onClick={() => openContactOptions(null)}
             className="flex items-center justify-center gap-2 py-3 px-4 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
           >
             <MessageCircle className="w-4 h-4" />
@@ -315,9 +344,16 @@ export default function ProfilePage() {
 
         {/* Order History Section */}
         <section>
-          <h2 className="text-lg font-bold text-gray-900 mb-4">
+          <h2 className="text-lg font-bold text-gray-900 mb-3">
             ประวัติการสั่งซื้อสินค้า
           </h2>
+          <Link
+            href="/profile/reviews"
+            className="flex items-center justify-center gap-2 w-full py-3 px-4 mb-4 bg-pink-500 text-white rounded-lg font-medium text-sm hover:bg-pink-600 transition-colors"
+          >
+            <Star className="w-4 h-4" />
+            รีวิวสินค้า
+          </Link>
 
           {/* Order Status Tabs */}
           <div className="border-b border-gray-200 mb-2">
@@ -370,6 +406,10 @@ export default function ProfilePage() {
             <div className="space-y-4">
               {orderGroups.map(([orderId, items]) => {
                 const firstItem = items[0];
+                const needsPayment =
+                  firstItem.status !== 'cancelled' &&
+                  (firstItem.status === 'ordered' || firstItem.status === 'confirmed') &&
+                  firstItem.paymentStatus !== 'completed';
                 return (
                   <div
                     key={orderId}
@@ -425,9 +465,6 @@ export default function ProfilePage() {
                             firstItem.paymentAmount ??
                             firstItem.totalAmount ??
                             items.reduce((s, i) => s + i.price, 0);
-                          const needsPayment =
-                            (firstItem.status === 'ordered' || firstItem.status === 'confirmed') &&
-                            firstItem.paymentStatus !== 'completed';
                           if (needsPayment && amount > 0) {
                             return (
                               <div className="space-y-2">
@@ -463,6 +500,15 @@ export default function ProfilePage() {
                       >
                         ดูรายละเอียดออเดอร์
                       </Link>
+                      {needsPayment && (
+                        <button
+                          type="button"
+                          onClick={() => openContactOptions(orderId)}
+                          className="inline-flex items-center px-3 py-1.5 border border-amber-500 rounded-lg text-xs font-medium text-amber-700 bg-white hover:bg-amber-50"
+                        >
+                          ชำระเงิน / ติดต่อร้าน
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -482,17 +528,6 @@ export default function ProfilePage() {
             <ChevronUp className="w-6 h-6" strokeWidth={2.5} />
           </button>
         )}
-
-        {/* Bottom Action Buttons */}
-        <div className="mt-6 space-y-3">
-          <Link
-            href="/profile/reviews"
-            className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-pink-500 text-white rounded-lg font-medium hover:bg-pink-600 transition-colors"
-          >
-            <Star className="w-4 h-4" />
-            รีวิวสินค้า
-          </Link>
-        </div>
       </main>
 
       {/* Contact Options Bottom Sheet */}
@@ -538,6 +573,17 @@ export default function ProfilePage() {
                 </span>
                 <ExternalLink className="w-4 h-4" />
               </a>
+              <button
+                type="button"
+                onClick={handleBankTransferFromModal}
+                className="flex items-center justify-between w-full py-3 px-4 border-2 border-pink-500 rounded-lg text-sm font-medium text-pink-600 hover:bg-pink-50 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <Landmark className="w-4 h-4" />
+                  โอนชำระเงิน
+                </span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
               <button
                 type="button"
                 onClick={closeContactOptions}

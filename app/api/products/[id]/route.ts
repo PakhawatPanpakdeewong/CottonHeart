@@ -20,6 +20,22 @@ function getProductImageUrls(sku: string | null | undefined, maxImages: number =
   return slots;
 }
 
+/** ชื่อตารางเชื่อม variant ↔ attributevalue — กำหนดใน DB_VARIANT_ATTRIBUTE_TABLE ได้ (เฉพาะ a-z 0-9 _) */
+function variantAttributeJoinTableName(): string {
+  const raw = process.env.DB_VARIANT_ATTRIBUTE_TABLE || 'variantattributevalues';
+  const safe = raw.replace(/[^a-zA-Z0-9_]/g, '');
+  return safe || 'variantattributevalues';
+}
+
+type VariantAttrRow = {
+  attributeId: number;
+  nameTH: string;
+  nameEN: string | null;
+  valueTH: string;
+  valueEN: string | null;
+  valueCode: string;
+};
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -76,6 +92,55 @@ export async function GET(
 
     // Fetch active discounts for variants (discounts.variantid)
     const variantIds = variants.map((v: { variantid: number }) => v.variantid);
+
+    // คุณสมบัติจาก attributevalues + attributes ผ่านตารางเชื่อม (เช่น variantattributevalues)
+    const variantAttrsByVariantId: Record<number, VariantAttrRow[]> = {};
+    if (variantIds.length > 0) {
+      const joinTable = variantAttributeJoinTableName();
+      try {
+        const attrSql = `
+          SELECT DISTINCT ON (vav.variantid, a.attributeid)
+            vav.variantid,
+            a.attributeid,
+            a.attributenameth,
+            a.attributenameen,
+            av.attributevalueth,
+            av.attributevalueen,
+            av.attributevaluecode
+          FROM ${joinTable} vav
+          INNER JOIN attributevalues av ON av.attributevalueid = vav.attributevalueid
+          INNER JOIN attributes a ON a.attributeid = av.attributeid
+          WHERE vav.variantid = ANY($1::int[])
+          ORDER BY vav.variantid, a.attributeid, av.attributevalueid
+        `;
+        const attrResult = await pool.query(attrSql, [variantIds]);
+        for (const r of attrResult.rows as {
+          variantid: number;
+          attributeid: number;
+          attributenameth: string | null;
+          attributenameen: string | null;
+          attributevalueth: string | null;
+          attributevalueen: string | null;
+          attributevaluecode: string | null;
+        }[]) {
+          const vid = r.variantid;
+          if (!variantAttrsByVariantId[vid]) variantAttrsByVariantId[vid] = [];
+          variantAttrsByVariantId[vid].push({
+            attributeId: r.attributeid,
+            nameTH: (r.attributenameth ?? '').trim() || `คุณสมบัติ #${r.attributeid}`,
+            nameEN: r.attributenameen?.trim() || null,
+            valueTH: (r.attributevalueth ?? '').trim(),
+            valueEN: r.attributevalueen?.trim() || null,
+            valueCode: (r.attributevaluecode ?? '').trim(),
+          });
+        }
+      } catch (attrErr) {
+        console.error(
+          'Product variant attributes (attributevalues join) query failed — ตรวจสอบตารางเชื่อมและคอลัมน์ attributes:',
+          attrErr
+        );
+      }
+    }
     let variantDiscounts: Record<number, { discountId: number; discountType: string; discountValue: number; maximumDiscountAmount: number | null }> = {};
     if (variantIds.length > 0) {
       const discountRes = await pool.query(
@@ -293,6 +358,7 @@ export async function GET(
           originalPrice: vOriginal,
           discountPercent: vDiscountPct,
           discountId: vDiscountId,
+          attributeValues: variantAttrsByVariantId[v.variantid] ?? [],
         };
       }),
       availableStock,

@@ -48,6 +48,7 @@ function PaymentPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orderId = searchParams.get('orderId');
+  const hideContinue = searchParams.get('hideContinue') === '1';
   const { user, isAuthenticated, isLoading } = useAuth();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,9 +61,13 @@ function PaymentPageInner() {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.push(`/login?returnUrl=${encodeURIComponent(`/checkout/payment${orderId ? `?orderId=${orderId}` : ''}`)}`);
+      const qs = new URLSearchParams();
+      if (orderId) qs.set('orderId', orderId);
+      if (hideContinue) qs.set('hideContinue', '1');
+      const suffix = qs.toString() ? `?${qs}` : '';
+      router.push(`/login?returnUrl=${encodeURIComponent(`/checkout/payment${suffix}`)}`);
     }
-  }, [isAuthenticated, isLoading, router, orderId]);
+  }, [isAuthenticated, isLoading, router, orderId, hideContinue]);
 
   useEffect(() => {
     if (!isAuthenticated || !user || !orderId) {
@@ -246,23 +251,25 @@ function PaymentPageInner() {
           </div>
         </div>
 
-        {/* Order Summary */}
-        <div className="bg-white border border-gray-100 rounded-lg p-4 mb-6">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">ยอดรวมค่าสินค้า</span>
-              <span className="text-gray-900 font-medium">฿ {totalProduct.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">ค่าจัดส่ง (ขั้นต้น)</span>
-              <span className="text-gray-900 font-medium">฿ {order.shippingCost.toFixed(2)}</span>
-            </div>
-            <div className="border-t border-gray-100 pt-2 flex justify-between">
-              <span className="text-base font-semibold text-gray-900">ยอดที่ต้องชำระ</span>
-              <span className="text-lg font-bold text-pink-500">฿ {totalPay.toFixed(2)}</span>
+        {/* Order Summary — ซ่อนเมื่อเข้าจากเมนู «โอนชำระเงิน» (hideContinue) */}
+        {!hideContinue && (
+          <div className="bg-white border border-gray-100 rounded-lg p-4 mb-6">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">ยอดรวมค่าสินค้า</span>
+                <span className="text-gray-900 font-medium">฿ {totalProduct.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">ค่าจัดส่ง (ขั้นต้น)</span>
+                <span className="text-gray-900 font-medium">฿ {order.shippingCost.toFixed(2)}</span>
+              </div>
+              <div className="border-t border-gray-100 pt-2 flex justify-between">
+                <span className="text-base font-semibold text-gray-900">ยอดที่ต้องชำระ</span>
+                <span className="text-lg font-bold text-pink-500">฿ {totalPay.toFixed(2)}</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Payment Instructions - Bank Transfer / QR */}
         <div className="bg-white border border-gray-100 rounded-lg p-4 mb-6">
@@ -304,17 +311,19 @@ function PaymentPageInner() {
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleContinue}
-            disabled={isSubmitting || isCancelling}
-            className="w-full py-3.5 bg-pink-500 text-white rounded-lg font-semibold hover:bg-pink-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed text-sm"
-          >
-            {isSubmitting ? 'กำลังสร้างรหัสอ้างอิง...' : 'ดำเนินการต่อ'}
-          </button>
-        </div>
+        {/* Action Buttons — ซ่อนเมื่อเข้ามาจากช่องทาง «โอนชำระเงิน» ในเมนูติดต่อ (ดู QR/บัญชีโดยไม่สร้างรหัสอ้างอิงในขั้นนี้) */}
+        {!hideContinue && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleContinue}
+              disabled={isSubmitting || isCancelling}
+              className="w-full py-3.5 bg-pink-500 text-white rounded-lg font-semibold hover:bg-pink-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed text-sm"
+            >
+              {isSubmitting ? 'กำลังสร้างรหัสอ้างอิง...' : 'ดำเนินการต่อ'}
+            </button>
+          </div>
+        )}
 
         {/* Next Step Preview */}
         <div className="mt-6 space-y-4">

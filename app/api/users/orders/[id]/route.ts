@@ -18,6 +18,13 @@ function mapOrderStatus(dbStatus: string): 'ordered' | 'confirmed' | 'shipping' 
   }
 }
 
+/** คอลัมน์ orders.notes: ถ้าเป็น NULL หรือว่าง = ยังไม่มีรหัสอ้างอิงโอน (ส่งให้ client เป็น null) */
+function notesToReferenceCode(notes: string | null | undefined): string | null {
+  if (notes == null) return null;
+  const t = String(notes).trim();
+  return t === '' ? null : t;
+}
+
 function mapPaymentMethod(method: string): string {
   const map: Record<string, string> = {
     cash_on_delivery: 'เงินสด',
@@ -128,7 +135,7 @@ export async function GET(
 
     // 4. Payment (รวม payment_deadline_at สำหรับ countdown)
     const payRes = await pool.query(
-      `SELECT paymentamount, paymentmethod, paymentdate, trackingnumber, paymentstatus, payment_deadline_at
+      `SELECT paymentamount, paidamount, paymentmethod, paymentdate, trackingnumber, paymentstatus, payment_deadline_at
        FROM payments
        WHERE orderid = $1
        ORDER BY paymentid DESC
@@ -149,7 +156,7 @@ export async function GET(
       orderStatus: effectiveOrderStatus,
       totalAmount: parseFloat(orderRow.totalamount),
       shippingAddress: orderRow.shippingaddress || '—',
-      referenceCode: orderRow.notes || null,
+      referenceCode: notesToReferenceCode(orderRow.notes),
       recipientName: fullName,
       recipientPhone: orderRow.phonenumber || '—',
       trackingNumber: ship.trackingnumber || null,
@@ -159,6 +166,10 @@ export async function GET(
       subtotal,
       paymentMethod: mapPaymentMethod(pay.paymentmethod),
       paymentAmount: pay.paymentamount ? parseFloat(pay.paymentamount) : null,
+      paidAmount:
+        pay.paidamount != null && pay.paidamount !== ''
+          ? parseFloat(String(pay.paidamount))
+          : null,
       paymentDate: pay.paymentdate || null,
       paymentTransactionId: pay.trackingnumber || null,
       paymentStatus: pay.paymentstatus || null,
