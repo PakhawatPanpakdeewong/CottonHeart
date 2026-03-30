@@ -88,20 +88,22 @@ const ProductCard = ({
 // Section Header Component
 interface SectionHeaderProps {
   title: string;
-  linkText: string;
+  linkText?: string;
   linkHref?: string;
 }
 
 const SectionHeader = ({ title, linkText, linkHref }: SectionHeaderProps) => (
   <div className="flex justify-between items-center mb-4">
     <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-    {linkHref ? (
-      <Link href={linkHref} className="text-sm text-pink-500 hover:text-pink-600">
-        {linkText}
-      </Link>
-    ) : (
-      <button className="text-sm text-pink-500 hover:text-pink-600">{linkText}</button>
-    )}
+    {linkText ? (
+      linkHref ? (
+        <Link href={linkHref} className="text-sm text-pink-500 hover:text-pink-600">
+          {linkText}
+        </Link>
+      ) : (
+        <button className="text-sm text-pink-500 hover:text-pink-600">{linkText}</button>
+      )
+    ) : null}
   </div>
 );
 
@@ -127,59 +129,19 @@ interface Category {
   subCategories: Array<{ id: number; nameTH: string; nameEN: string; productCount?: number }>;
 }
 
+// Fixed color order (left->right, top->bottom):
+// pink, green, yellow, blue, purple, gray
 const CATEGORY_STYLES = [
+  { bg: 'bg-pink-50', hover: 'hover:bg-pink-100', icon: 'text-pink-600', Icon: Heart },
+  { bg: 'bg-green-50', hover: 'hover:bg-green-100', icon: 'text-green-600', Icon: LayoutGrid },
+  { bg: 'bg-yellow-50', hover: 'hover:bg-yellow-100', icon: 'text-yellow-700', Icon: Shirt },
   { bg: 'bg-blue-50', hover: 'hover:bg-blue-100', icon: 'text-blue-600', Icon: Package },
-  { bg: 'bg-green-50', hover: 'hover:bg-green-100', icon: 'text-green-600', Icon: Baby },
-  { bg: 'bg-yellow-50', hover: 'hover:bg-yellow-100', icon: 'text-yellow-700', Icon: Sparkles },
-  { bg: 'bg-amber-50', hover: 'hover:bg-amber-100', icon: 'text-amber-700', Icon: Heart },
-  { bg: 'bg-pink-50', hover: 'hover:bg-pink-100', icon: 'text-pink-600', Icon: UtensilsCrossed },
-  { bg: 'bg-slate-50', hover: 'hover:bg-slate-100', icon: 'text-slate-600', Icon: LayoutGrid },
+  { bg: 'bg-purple-50', hover: 'hover:bg-purple-100', icon: 'text-purple-600', Icon: Sparkles },
+  { bg: 'bg-gray-50', hover: 'hover:bg-gray-100', icon: 'text-gray-600', Icon: UtensilsCrossed },
 ];
 
 const getCategoryStyle = (category: Category, index: number) => {
-  const name = category.nameTH || '';
-
-  // อุปกรณ์ป้อนอาหาร -> โทนสีเทา
-  if (name.includes('อุปกรณ์ป้อนอาหาร')) {
-    return { bg: 'bg-gray-50', hover: 'hover:bg-gray-100', icon: 'text-gray-600', Icon: UtensilsCrossed };
-  }
-
-  // การให้นม / ปั๊มนม
-  if (name.includes('ให้นม') || name.includes('ปั๊มนม')) {
-    return { bg: 'bg-pink-50', hover: 'hover:bg-pink-100', icon: 'text-pink-600', Icon: Baby };
-  }
-
-  // ของเล่น / เสริมพัฒนาการ
-  if (name.includes('ของเล่น') || name.includes('พัฒนาการ')) {
-    return { bg: 'bg-green-50', hover: 'hover:bg-green-100', icon: 'text-green-600', Icon: LayoutGrid };
-  }
-
-  // เสื้อผ้า
-  if (name.includes('เสื้อผ้า')) {
-    return { bg: 'bg-yellow-50', hover: 'hover:bg-yellow-100', icon: 'text-yellow-700', Icon: Shirt };
-  }
-
-  // ผ้าอ้อม / ผลิตภัณฑ์สำหรับผ้าอ้อม
-  if (name.includes('ผ้าอ้อม')) {
-    return { bg: 'bg-purple-50', hover: 'hover:bg-purple-100', icon: 'text-purple-600', Icon: Package };
-  }
-
-  // ทำความสะอาด / ดูแลความสะอาด
-  if (name.includes('ทำความสะอาด') || name.includes('สะอาด')) {
-    return { bg: 'bg-indigo-50', hover: 'hover:bg-indigo-100', icon: 'text-indigo-600', Icon: Sparkles };
-  }
-
-  // อาหาร / อาหารเสริม / ป้อนอาหาร
-  if (name.includes('อาหาร') || name.includes('ป้อน')) {
-    return { bg: 'bg-amber-50', hover: 'hover:bg-amber-100', icon: 'text-amber-700', Icon: UtensilsCrossed };
-  }
-
-  // หมวดดูแลทั่วไป/อื่น ๆ
-  if (name.includes('ดูแล') || name.includes('อุปกรณ์')) {
-    return { bg: 'bg-pink-50', hover: 'hover:bg-pink-100', icon: 'text-pink-600', Icon: Heart };
-  }
-
-  // Fallback: ใช้ลำดับเดิมหมุนตาม index
+  // Always use fixed order by index (ignore category name)
   return CATEGORY_STYLES[index % CATEGORY_STYLES.length];
 };
 
@@ -384,6 +346,92 @@ export default function Home() {
     fetchOrderedProducts();
   }, [isAuthenticated, user]);
 
+  // Fetch recommended products (API: /recommendation/user/{customer_id})
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) {
+      setRecommendedProducts([]);
+      setLoadingRecommended(false);
+      setErrorRecommended(null);
+      return;
+    }
+
+    const fetchRecommended = async () => {
+      try {
+        setLoadingRecommended(true);
+        setErrorRecommended(null);
+        const res = await fetch(`/api/recommendation/user/${user.id}`);
+        if (!res.ok) {
+          throw new Error('Failed to fetch recommended products');
+        }
+        const data = await res.json();
+
+        const list: unknown =
+          (data &&
+          typeof data === 'object' &&
+          data !== null &&
+          'items' in data &&
+          Array.isArray((data as any).items))
+            ? (data as any).items
+            : (data && typeof data === 'object' && 'products' in data ? (data as { products?: unknown }).products : data) ??
+              [];
+
+        const productsRaw = Array.isArray(list) ? list : [];
+        const normalized: Product[] = productsRaw
+          .map((item: any) => {
+            const idVal =
+              item?.productId ??
+              item?.product_id ??
+              item?.productid ??
+              item?.productID ??
+              item?.id ??
+              item?.variant_id ??
+              item?.variantId ??
+              item?.variantid;
+            const id = idVal !== undefined && idVal !== null ? String(idVal) : '';
+            if (!id) return null;
+
+            const finalName = String(
+              item?.product_name ??
+                item?.productName ??
+                item?.product_name ??
+                item?.name ??
+                item?.title ??
+                ''
+            );
+            const priceVal = item?.price ?? item?.unitPrice ?? item?.salePrice ?? item?.sale_price ?? '0';
+
+            return {
+              id,
+              name: finalName,
+              nameEN: String(item?.nameEN ?? item?.name_en ?? ''),
+              description: (item?.description ?? null) as string | null,
+              price: String(priceVal ?? '0'),
+              sku: (item?.sku ?? null) as string | null,
+              image: (item?.image_url ?? item?.image ?? item?.imageUrl ?? null) as string | null,
+              brand: (item?.brand ?? null) as string | null,
+              category: (item?.category ?? item?.categoryName ?? null) as string | null,
+              variantId: (item?.variant_id ?? item?.variantId ?? item?.variantid ?? null) as number | null,
+              isActive: (item?.isActive ?? null) as boolean | null,
+              createdAt: String(item?.createdAt ?? item?.created_at ?? new Date().toISOString()),
+            };
+          })
+          .filter(Boolean) as Product[];
+
+        setRecommendedProducts(normalized);
+      } catch (err) {
+        console.error('Error fetching recommended products:', err);
+        setRecommendedProducts([]);
+        setErrorRecommended(
+          err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดสินค้าแนะนำ'
+        );
+      } finally {
+        setLoadingRecommended(false);
+      }
+    };
+
+    fetchRecommended();
+  }, [isAuthenticated, user?.id]);
+
   useEffect(() => {
     const handleScroll = () => setShowScrollTop(window.scrollY > 300);
     window.addEventListener('scroll', handleScroll);
@@ -462,13 +510,54 @@ export default function Home() {
           </section>
         )}
 
+        {/* Recommended Products - สินค้าแนะนำสำหรับผู้ใช้ */}
+        <section>
+          <SectionHeader
+            title="สินค้าแนะนำ"
+            linkText={undefined}
+            linkHref={undefined}
+          />
+
+          {!isAuthenticated ? (
+            <div className="text-center py-8 text-gray-500 text-sm bg-white rounded-xl border border-gray-100">
+              เข้าสู่ระบบเพื่อดูสินค้าแนะนำเฉพาะสำหรับคุณ
+            </div>
+          ) : loadingRecommended ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-100 rounded-lg h-64 animate-pulse" />
+              <div className="bg-gray-100 rounded-lg h-64 animate-pulse" />
+            </div>
+          ) : errorRecommended ? (
+            <div className="text-center py-8 text-gray-500 text-sm bg-white rounded-xl border border-gray-100">
+              {errorRecommended}
+            </div>
+          ) : recommendedProducts.length > 0 ? (
+            <div className="grid grid-cols-2 gap-4">
+              {recommendedProducts.slice(0, 4).map((product) => (
+                <ProductCard
+                  key={product.id}
+                  id={product.id}
+                  name={product.name}
+                  price={product.price}
+                  image={product.image}
+                  category={product.category}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500 text-sm bg-white rounded-xl border border-gray-100">
+              ยังไม่มีสินค้าแนะนำในตอนนี้
+            </div>
+          )}
+        </section>
+
         {/* Previously Ordered Products - Only show if authenticated, data from DB */}
         {isAuthenticated && (
           <section>
             <SectionHeader
               title="สินค้าที่เคยสั่งซื้อ"
-              linkText="ดูเพิ่มเติม"
-              linkHref="/profile"
+              linkText={undefined}
+              linkHref={undefined}
             />
             {loadingOrdered ? (
               <div className="grid grid-cols-2 gap-4">
@@ -503,7 +592,7 @@ export default function Home() {
             <SectionHeader
               title="สินค้าที่มีส่วนลด"
               linkText="ดูเพิ่มเติม"
-              linkHref="/search"
+              linkHref="/search?onSale=1"
             />
             {loadingDiscounted ? (
               <div className="grid grid-cols-2 gap-4">

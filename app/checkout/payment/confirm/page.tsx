@@ -17,6 +17,10 @@ const B3Img = '/B3.png';
 const B4Img = '/B4.png';
 const B5Img = '/B5.png';
 
+// รูป Set F - ขั้นตอนการยืนยันการโอนใน Facebook Chat (public/F1.png, public/F2.png)
+const F1Img = '/F1.png';
+const F2Img = '/F2.png';
+
 interface OrderDetail {
   orderId: string;
   totalAmount: number;
@@ -331,6 +335,35 @@ function PaymentConfirmPageInner() {
               <p className="text-sm text-gray-600 mb-2">ระบบจะทำการตรวจสอบข้อมูลไม่เกิน 5 นาทีและจะทำการตอบกลับสถานะการชำระอีกครั้ง</p>
               <div className="rounded-lg overflow-hidden border border-gray-200">
                 <img src={B5Img} alt="ขั้นตอน 5 - ยืนยันการชำระ" className="w-full h-auto" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Facebook Chat Tutorial - ขั้นตอนการยืนยันการโอนชำระใน Facebook Chat */}
+        <div className="bg-white border border-gray-100 rounded-lg p-4 mb-6">
+          <h2 className="text-base font-semibold text-gray-900 mb-4">
+            ขั้นตอนการยืนยันการโอนชำระใน Facebook Chat
+          </h2>
+
+          <div className="space-y-6">
+            <div>
+              <p className="text-sm font-medium text-gray-800 mb-2">ขั้นตอนที่ 1</p>
+              <p className="text-sm text-gray-600 mb-2">
+                เปิดแชท Facebook Messenger ของร้าน พิมพ์คำว่า "แนบสลิป" ระบบจะแจ้งให้กรอกเลขยืนยันการโอนชำระ เมื่อจากนั้นส่งเลขยืนยันการโอนชำระ (รหัส 6 หลักด้านบน) ในช่องแชท
+              </p>
+              <div className="rounded-lg overflow-hidden border border-gray-200">
+                <img src={F1Img} alt="ขั้นตอน 1 - ส่งเลขยืนยันการโอนใน Facebook Chat" className="w-full h-auto" />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-gray-800 mb-2">ขั้นตอนที่ 2</p>
+              <p className="text-sm text-gray-600 mb-2">
+                ต่อมาให้ส่งรูปหลักฐานการโอนหรือสลิปในช่องแชท ร้านจะตรวจสอบและตอบกลับสถานะการชำระ
+              </p>
+              <div className="rounded-lg overflow-hidden border border-gray-200">
+                <img src={F2Img} alt="ขั้นตอน 2 - ส่งสลิปการโอนใน Facebook Chat" className="w-full h-auto" />
               </div>
             </div>
           </div>

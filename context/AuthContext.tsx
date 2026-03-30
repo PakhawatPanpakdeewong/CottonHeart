@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 interface User {
+  id?: number;
   username: string;
   email?: string;
   loggedIn: boolean;
@@ -40,6 +41,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Backfill customer id for older sessions
+  useEffect(() => {
+    if (!user?.loggedIn) return;
+    if (typeof user.id === 'number' && user.id > 0) return;
+
+    const email = user.email || (user.username?.includes('@') ? user.username : undefined);
+    if (!email) return;
+
+    const backfill = async () => {
+      try {
+        const res = await fetch(`/api/users/profile?email=${encodeURIComponent(email)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const id = Number(data?.customerId);
+        if (!Number.isFinite(id) || id <= 0) return;
+
+        setUser((prev) => {
+          if (!prev) return prev;
+          const merged = { ...prev, id };
+          localStorage.setItem('cottonheart_user', JSON.stringify(merged));
+          return merged;
+        });
+      } catch {
+        // ignore
+      }
+    };
+
+    backfill();
+  }, [user]);
+
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
       const res = await fetch('/api/auth/login', {
@@ -50,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       if (!res.ok || !data.user) return false;
       const userData: User = {
+        id: typeof data.user.id === 'number' ? data.user.id : undefined,
         username: data.user.email,
         email: data.user.email,
         loggedIn: true,

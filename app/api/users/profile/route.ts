@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     }
 
     const result = await pool.query(
-      `SELECT firstname, lastname, phonenumber, gender, dateofbirth, email 
+      `SELECT customerid, firstname, lastname, phonenumber, gender, dateofbirth, email 
        FROM customers 
        WHERE email = $1 AND isactive = true`,
       [email.trim().toLowerCase()]
@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
     const emailVal = row.email || null;
 
     return NextResponse.json({
+      customerId: row.customerid ?? null,
       fullName,
       phone,
       firstName: row.firstname || '',
